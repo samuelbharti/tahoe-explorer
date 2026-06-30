@@ -1,0 +1,26 @@
+.git
+.gitignore
+.github
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+renv/library
+renv/staging
+dev
+docs
+tests
+*.Rproj
+
+# Dev tooling / configs not needed in the image
+template.yml
+.pre-commit-config.yaml
+air.toml
+.lintr
+.markdownlint.json
+.markdownlintignore
+.Renviron
+.Renviron.example
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+CHANGELOG.md

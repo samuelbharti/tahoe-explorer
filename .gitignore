@@ -1,0 +1,15 @@
+*.Rproj
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# Local config/secrets
+.Renviron
+
+# renv local library/cache (keep renv.lock tracked)
+renv/library/
+renv/staging/
+
+# Local development helpers
+dev/.Rhistory

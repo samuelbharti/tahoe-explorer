@@ -1,0 +1,89 @@
+# Continuous integration for the Shiny app template.
+# Runs on every push/PR to the main development branches.
+#
+# Jobs:
+#   lint     - static analysis of R source with {lintr} (config in .lintr)
+#   format   - verifies R code is formatted with air (config in air.toml)
+#   app      - installs dependencies and runs the shinytest2 smoke test
+#   markdown - lints Markdown files (config in .markdownlint.json)
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+    branches: [main, master, dev]
+
+name: CI
+
+permissions: read-all
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::lintr
+            any::shiny
+            any::bslib
+            any::brand.yml
+            any::dplyr
+            any::ggplot2
+            any::DT
+            any::plotly
+      - name: Lint
+        run: |
+          lints <- lintr::lint_dir(".")
+          print(lints)
+          if (length(lints) > 0) stop(sprintf("Found %d lint(s).", length(lints)))
+        shell: Rscript {0}
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: posit-dev/setup-air@v1
+      - name: Check formatting
+        run: air format --check .
+
+  app:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::shiny
+            any::bslib
+            any::brand.yml
+            any::dplyr
+            any::ggplot2
+            any::DT
+            any::plotly
+            any::shinytest2
+            any::testthat
+      - name: Run tests (app smoke test)
+        run: shiny::runTests(".", assert = TRUE)
+        shell: Rscript {0}
+
+  markdown:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint markdown files
+        uses: DavidAnson/markdownlint-cli2-action@v20
+        with:
+          globs: |
+            **/*.md
+            !renv

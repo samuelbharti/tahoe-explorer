@@ -1,0 +1,36 @@
+name: Feature Request
+description: Suggest an idea or enhancement for this application
+title: "[Feature]: "
+labels: [feature-request]
+body:
+  - type: checkboxes
+    attributes:
+      label: Is there an existing issue for this?
+      description: Please search to see if a request already exists.
+      options:
+        - label: I have searched the existing issues
+          required: true
+  - type: textarea
+    attributes:
+      label: Problem / Motivation
+      description: What problem would this feature solve? What are you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed Solution
+      description: A concise description of what you'd like to happen.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative solutions or features you've considered.
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: Anything else?
+      description: Add any other context, mockups, or references here.
+    validations:
+      required: false
