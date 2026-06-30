@@ -1,0 +1,7 @@
+# Example environment file. Copy to `.Renviron` (which is git-ignored) and fill
+# in real values. R reads `.Renviron` automatically on startup.
+#
+# Examples:
+# APP_DATA_DIR=data
+# DATABASE_URL=postgres://user:pass@host:5432/dbname
+# API_TOKEN=replace-me

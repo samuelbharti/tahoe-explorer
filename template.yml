@@ -1,0 +1,72 @@
+# Template manifest.
+#
+# This is the contract for turning the template into a real project. It is read
+# by `dev/use_template.R` (run by a human after "Use this template", or called
+# programmatically by an initializer package). It also doubles as a human-
+# readable checklist of everything that is the template's identity rather than
+# your app's.
+#
+# {{var}} placeholders below expand from the `variables` section.
+
+name: rshiny-app
+min_r_version: "4.3"
+
+# Values collected at init time (prompted interactively, passed as CLI flags,
+# or supplied programmatically). Each has a default so the template still runs
+# as-is on a plain clone.
+variables:
+  project_name:
+    prompt: "App title"
+    default: "My App"
+  description:
+    prompt: "Short description"
+    default: "A Shiny application."
+  author:
+    prompt: "Author name"
+    default: ""
+  version:
+    prompt: "Initial version"
+    default: "0.1.0"
+
+# Exact-string find/replace operations. `from` is matched literally (not regex);
+# `to` may contain {{variables}}. A small, precise target list is deliberate —
+# it is far more robust than find/replacing a generic word across prose.
+substitutions:
+  - file: README.md
+    from: "# Project Title"
+    to: "# {{project_name}}"
+  - file: README.md
+    from: "Add a short description of your application."
+    to: "{{description}}"
+  - file: README.md
+    from: "Current app version: v2.0"
+    to: "Current app version: {{version}}"
+  - file: ui.R
+    from: 'title = "My App"'
+    to: 'title = "{{project_name}}"'
+  - file: _brand.yml
+    from: "name: My App"
+    to: "name: {{project_name}}"
+  - file: R/utils.R
+    from: '"2.0.0"'
+    to: '"{{version}}"'
+
+# Whole files describing THE TEMPLATE, not your app. Deleted on init.
+strip_files:
+  - CITATION.cff
+  - CITATION.md
+
+# Files containing blocks wrapped in
+#   <!-- template:strip:start --> ... <!-- template:strip:end -->
+# markers. The marked blocks (and the markers) are removed on init.
+strip_blocks:
+  - README.md
+
+# Files reset to a fresh starter state.
+reset:
+  changelog: CHANGELOG.md
+
+# Template machinery removed after a successful init (unless --keep is passed).
+self_remove:
+  - template.yml
+  - dev/use_template.R

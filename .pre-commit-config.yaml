@@ -1,0 +1,45 @@
+# Pre-commit hooks for this R Shiny app template.
+# Setup:  pip install pre-commit  &&  pre-commit install
+# Run on everything:  pre-commit run --all-files
+# Docs: https://pre-commit.com / https://lorenzwalthert.github.io/precommit/
+
+# Generated/vendored paths that hooks should never touch.
+exclude: "^(renv/|data/|docs/)"
+
+repos:
+  # R code formatting with air (matches air.toml; same formatter rstudio/shiny uses).
+  - repo: https://github.com/posit-dev/air
+    rev: v0.9.0
+    hooks:
+      - id: air-format
+
+  # R-specific lint and safety checks.
+  - repo: https://github.com/lorenzwalthert/precommit
+    rev: v0.4.3
+    hooks:
+      - id: lintr
+      - id: parsable-R
+      - id: no-browser-statement
+      - id: no-debug-statement
+      - id: no-print-statement
+        exclude: "^dev/"
+
+  # Generic hygiene.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: check-added-large-files
+        args: ["--maxkb=2000"]
+      - id: check-yaml
+      - id: check-merge-conflict
+
+  # Catch common spelling mistakes in code and docs.
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.3.0
+    hooks:
+      - id: codespell
+        args: ["--ignore-words-list=ans,fo"]
