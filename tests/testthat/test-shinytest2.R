@@ -1,22 +1,21 @@
 # End-to-end smoke test: launch the real app in a headless browser and confirm
-# it starts and the example module reacts to input.
+# the Overview tab renders against the fixtures.
 # Skipped automatically when no Chrome/Chromium is available.
 
-test_that("app launches and the counter responds to clicks", {
+test_that("app launches and renders the Overview tab", {
   testthat::skip_if_not_installed("shinytest2")
 
   app <- shinytest2::AppDriver$new(
     app_dir = test_path("..", ".."),
-    name = "app-smoke",
-    height = 800,
-    width = 1000
+    name = "app-overview",
+    height = 900,
+    width = 1200
   )
   withr::defer(app$stop())
 
-  # The counter module is mounted on the Home tab as "home_counter".
-  expect_equal(app$get_value(output = "home_counter-value"), "Current value: 0")
+  app$wait_for_idle(timeout = 30000)
 
-  app$click("home_counter-increment")
-  app$wait_for_idle()
-  expect_equal(app$get_value(output = "home_counter-value"), "Current value: 1")
+  # The Overview value boxes are rendered server-side from the data layer.
+  boxes <- app$get_html("#overview-summary_boxes")
+  expect_match(boxes, "Drugs")
 })

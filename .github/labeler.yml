@@ -1,0 +1,32 @@
+# Path-based PR labels for actions/labeler@v5.
+modules:
+  - changed-files:
+      - any-glob-to-any-file: "modules/**"
+
+ui:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "userInterface/**"
+          - "ui.R"
+          - "_brand.yml"
+          - "www/**"
+
+data-layer:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "R/data.R"
+          - "dev/**"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: ".github/**"
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file: "tests/**"

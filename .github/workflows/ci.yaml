@@ -34,9 +34,13 @@ jobs:
             any::bslib
             any::brand.yml
             any::dplyr
+            any::stringr
             any::ggplot2
+            any::scales
             any::DT
+            any::reactable
             any::plotly
+            any::duckdb
       - name: Lint
         run: |
           lints <- lintr::lint_dir(".")
@@ -68,9 +72,13 @@ jobs:
             any::bslib
             any::brand.yml
             any::dplyr
+            any::stringr
             any::ggplot2
+            any::scales
             any::DT
+            any::reactable
             any::plotly
+            any::duckdb
             any::shinytest2
             any::testthat
       - name: Run tests (app smoke test)

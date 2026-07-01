@@ -3,14 +3,16 @@
 # Edit these values to match your brand. Spec: https://posit-dev.github.io/brand-yml/
 
 meta:
-  name: My App
+  name: Tahoe Explorer
 
 color:
   palette:
-    blue: "#0066cc"
+    teal: "#0b7285"
+    blue: "#1c7ed6"
     gray: "#5b6770"
-  primary: blue
+  primary: teal
   secondary: gray
+  info: blue
   foreground: "#1a1a1a"
   background: "#ffffff"
 
