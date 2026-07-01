@@ -82,12 +82,16 @@ subset_export_server <- function(
           df <- data.frame(note = character())
         }
         con <- tahoe_con()
-        duckdb::duckdb_register(con, "export_tmp", df)
-        on.exit(duckdb::duckdb_unregister(con, "export_tmp"), add = TRUE)
+        # Unique view name: the duckdb connection is shared process-wide, so a
+        # fixed name could clash if downloads ever run re-entrantly (async).
+        view <- paste0("export_tmp_", as.integer(stats::runif(1, 0, 2e9)))
+        duckdb::duckdb_register(con, view, df)
+        on.exit(duckdb::duckdb_unregister(con, view), add = TRUE)
         DBI::dbExecute(
           con,
           sprintf(
-            "COPY export_tmp TO '%s' (FORMAT PARQUET)",
+            "COPY %s TO '%s' (FORMAT PARQUET)",
+            view,
             gsub("'", "''", file, fixed = TRUE)
           )
         )

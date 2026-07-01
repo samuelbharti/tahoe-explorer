@@ -73,6 +73,10 @@ tahoe_table_path <- function(name) {
 tahoe_con <- function() {
   if (is.null(.tahoe_cache$con) || !DBI::dbIsValid(.tahoe_cache$con)) {
     .tahoe_cache$con <- DBI::dbConnect(duckdb::duckdb())
+    # A fresh connection has no extensions loaded; clear the httpfs flag so a
+    # later remote query re-loads it instead of assuming the old connection's
+    # state.
+    .tahoe_cache$httpfs <- FALSE
   }
   .tahoe_cache$con
 }
