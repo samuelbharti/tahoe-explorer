@@ -85,7 +85,9 @@ overview_server <- function(id) {
     })
 
     output$organ_plot <- renderPlot({
-      .overview_bar(tahoe_cell_line(), "Organ", "#41ab5d")
+      # One row per cell line, so organs count distinct cell lines rather than
+      # the driver-level rows of the source table.
+      .overview_bar(tahoe_cell_line_unique(), "Organ", "#41ab5d")
     })
   })
 }

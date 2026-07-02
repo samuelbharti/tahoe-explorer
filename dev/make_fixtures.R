@@ -151,6 +151,41 @@ obs_metadata <- data.frame(
   stringsAsFactors = FALSE
 )
 
+# The real cell_line_metadata table is driver-level: many rows per cell line,
+# one per driver mutation. Expand the 18 distinct lines into 2-6 driver rows
+# each so the fixture mirrors that shape (nrow > distinct cell_name). Built
+# after obs so the other fixtures' RNG stream is unchanged.
+cell_line_metadata <- do.call(
+  rbind,
+  lapply(seq_len(n_cell), function(i) {
+    base <- cell_metadata[i, , drop = FALSE]
+    k <- sample(2:6, 1)
+    genes_i <- sample(driver_genes, min(k, length(driver_genes)))
+    data.frame(
+      cell_name = base$cell_name,
+      Cell_ID_DepMap = base$Cell_ID_DepMap,
+      Cell_ID_Cellosaur = base$Cell_ID_Cellosaur,
+      Organ = base$Organ,
+      Driver_Gene_Symbol = genes_i,
+      Driver_VarZyg = sample(c("Het", "Hom"), length(genes_i), replace = TRUE),
+      Driver_VarType = sample(var_types, length(genes_i), replace = TRUE),
+      Driver_ProtEffect_or_CdnaEffect = "p.X000X",
+      Driver_Mech_InferDM = sample(
+        c("LoF", "GoF", "unknown"),
+        length(genes_i),
+        replace = TRUE
+      ),
+      Driver_GeneType_DM = sample(
+        c("oncogene", "TSG"),
+        length(genes_i),
+        replace = TRUE
+      ),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    )
+  })
+)
+
 con <- dbConnect(duckdb())
 on.exit(dbDisconnect(con, shutdown = TRUE), add = TRUE)
 
@@ -169,7 +204,7 @@ write_fixture <- function(df, name) {
 }
 
 write_fixture(drug_metadata, "drug_metadata")
-write_fixture(cell_metadata, "cell_line_metadata")
+write_fixture(cell_line_metadata, "cell_line_metadata")
 write_fixture(sample_metadata, "sample_metadata")
 write_fixture(gene_metadata, "gene_metadata")
 write_fixture(obs_metadata, "obs_metadata")

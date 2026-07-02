@@ -48,3 +48,22 @@ test_that("tahoe_summary_counts returns headline fields", {
   expect_gt(cc$drugs, 0)
   expect_identical(cc$obs_source, "fixture")
 })
+
+test_that("counts are of distinct entities, not raw metadata rows", {
+  cell <- tahoe_cell_line()
+  cc <- tahoe_summary_counts()
+
+  # The cell_line table is driver-level (many rows per cell line), so the
+  # headline count must be distinct cell lines, strictly fewer than nrow().
+  expect_gt(nrow(cell), dplyr::n_distinct(cell$cell_name))
+  expect_equal(cc$cell_lines, dplyr::n_distinct(cell$cell_name))
+  expect_lt(cc$cell_lines, nrow(cell))
+})
+
+test_that("tahoe_cell_line_unique collapses to one row per cell line", {
+  u <- tahoe_cell_line_unique()
+  expect_equal(nrow(u), dplyr::n_distinct(tahoe_cell_line()$cell_name))
+  expect_false(any(duplicated(u$cell_name)))
+  expect_true(all(c("drivers", "n_drivers") %in% names(u)))
+  expect_true(all(u$n_drivers >= 1))
+})

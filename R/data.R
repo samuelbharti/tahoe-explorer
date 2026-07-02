@@ -234,23 +234,62 @@ tahoe_obs_summary <- function(
   out
 }
 
-#' Headline dataset counts for the Overview tab.
+# Distinct values of a column, or nrow() if the column is missing. Counts of
+# distinct entities, not raw rows: the real cell_line_metadata table is
+# driver-level (many rows per cell line), so nrow() would overcount.
+.tahoe_n_distinct <- function(df, column) {
+  if (column %in% names(df)) {
+    dplyr::n_distinct(df[[column]])
+  } else {
+    nrow(df)
+  }
+}
+
+#' Cell-line metadata collapsed to one row per cell line. The source table has
+#' one row per driver mutation, so this keeps the first row per `cell_name` and
+#' summarizes the distinct driver genes into a `drivers` column (with
+#' `n_drivers`). Returns the table unchanged if `cell_name` is absent.
+tahoe_cell_line_unique <- function() {
+  df <- tahoe_cell_line()
+  if (!"cell_name" %in% names(df)) {
+    return(df)
+  }
+  drivers <- if ("Driver_Gene_Symbol" %in% names(df)) {
+    df |>
+      dplyr::group_by(.data$cell_name) |>
+      dplyr::summarise(
+        drivers = paste(
+          sort(unique(stats::na.omit(.data$Driver_Gene_Symbol))),
+          collapse = ", "
+        ),
+        n_drivers = dplyr::n_distinct(
+          stats::na.omit(.data$Driver_Gene_Symbol)
+        ),
+        .groups = "drop"
+      )
+  } else {
+    NULL
+  }
+  out <- df[!duplicated(df$cell_name), , drop = FALSE]
+  if (!is.null(drivers)) {
+    out <- dplyr::left_join(out, drivers, by = "cell_name")
+  }
+  dplyr::as_tibble(out)
+}
+
+#' Headline dataset counts for the Overview tab. Counts distinct entities
+#' (distinct cell lines, drugs, ...), not raw metadata rows.
 tahoe_summary_counts <- function() {
   drug <- tahoe_drug()
   cell_line <- tahoe_cell_line()
   sample <- tahoe_sample()
   gene <- tahoe_gene()
-  n_plate <- if ("plate" %in% names(sample)) {
-    dplyr::n_distinct(sample$plate)
-  } else {
-    NA_integer_
-  }
   list(
-    drugs = nrow(drug),
-    cell_lines = nrow(cell_line),
-    samples = nrow(sample),
-    plates = n_plate,
-    genes = nrow(gene),
+    drugs = .tahoe_n_distinct(drug, "drug"),
+    cell_lines = .tahoe_n_distinct(cell_line, "cell_name"),
+    samples = .tahoe_n_distinct(sample, "sample"),
+    plates = .tahoe_n_distinct(sample, "plate"),
+    genes = .tahoe_n_distinct(gene, "gene_symbol"),
     obs_source = tahoe_obs_source()$type,
     data_source = attr(drug, "tahoe_source")
   )
