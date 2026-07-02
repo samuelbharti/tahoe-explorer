@@ -1,67 +1,103 @@
 # Subset builder module.
 #
-# Pick a slice across drug x cell-line x dose x plate, preview how many
-# samples/cells it covers, then export the slice AND a copy-paste analysis
-# recipe (R + Python) to reproduce the selection on the full Tahoe-100M dataset.
+# Plan an analysis by slicing the dataset across tissue/organ, driver mutation,
+# cell line, drug, dose, and plate. Coverage value boxes and a live plot update
+# as the selection changes, then export the matched samples and a copy-paste
+# recipe (R + Python) to reproduce the slice on the full Tahoe-100M dataset.
 #
-# The small `sample_metadata` table only carries drug / dose / plate, so those
-# three dimensions narrow the matched-sample preview; cell lines exist only in
-# the cell-level obs data, so a cell-line selection feeds the coverage estimate
-# and the recipe predicate but does not restrict the sample preview.
+# Cell counts come from tahoe_cell_grid() (a small cached per drug x cell line x
+# plate x dose aggregate of the obs data), so everything updates live and
+# locally without re-querying 100M cells. All cell lines are pooled into every
+# sample, so organ / driver / cell-line filters change the cell count, not the
+# number of samples.
+
+# Distinct, sorted, non-missing character values of a column.
+.subset_choices <- function(df, column) {
+  if (is.null(df) || !column %in% names(df)) {
+    return(character())
+  }
+  vals <- as.character(df[[column]])
+  vals <- vals[!is.na(vals) & nzchar(vals)]
+  sort(unique(vals))
+}
 
 subset_builder_ui <- function(id) {
   ns <- NS(id)
 
-  samples <- tahoe_sample()
-  drugs <- tryCatch(sort(unique(tahoe_drug()$drug)), error = function(e) NULL)
-  cell_lines <- tryCatch(
-    sort(unique(tahoe_cell_line()$cell_name)),
-    error = function(e) NULL
-  )
-  doses <- tryCatch(
-    {
-      conc <- tahoe_parse_dose(samples$drugname_drugconc)$conc
-      sort(unique(conc[!is.na(conc)]))
-    },
-    error = function(e) NULL
-  )
-  plates <- if ("plate" %in% names(samples)) {
-    sort(unique(samples$plate))
-  } else {
-    NULL
-  }
+  grid <- tryCatch(tahoe_cell_grid(), error = function(e) NULL)
+  lines <- tryCatch(tahoe_cell_line(), error = function(e) NULL)
+  samples <- tryCatch(tahoe_sample(), error = function(e) NULL)
 
-  remote <- identical(tahoe_obs_source()$type, "remote")
+  assayed <- if (!is.null(grid)) unique(grid$cell_name) else character()
+  organ_choices <- .subset_choices(grid, "organ")
+  driver_choices <- if (!is.null(lines)) {
+    .subset_choices(
+      lines[lines$cell_name %in% assayed, , drop = FALSE],
+      "Driver_Gene_Symbol"
+    )
+  } else {
+    character()
+  }
+  drug_choices <- .subset_choices(grid, "drug")
+  dose_choices <- sort(unique(grid$conc[!is.na(grid$conc)]))
+
+  # Plate labels carry the number of distinct drug treatments per plate.
+  plate_choices <- NULL
+  if (!is.null(samples) && all(c("plate", "drug") %in% names(samples))) {
+    per_plate <- tapply(samples$drug, samples$plate, function(d) {
+      length(unique(d))
+    })
+    ord <- order(as.integer(gsub("\\D", "", names(per_plate))))
+    per_plate <- per_plate[ord]
+    plate_choices <- stats::setNames(
+      names(per_plate),
+      sprintf("%s · %d drugs", names(per_plate), per_plate)
+    )
+  }
 
   bslib::layout_sidebar(
     sidebar = bslib::sidebar(
       title = "Build a subset",
-      width = 320,
+      width = 330,
       selectizeInput(
-        ns("drugs"),
-        "Drugs",
-        choices = drugs,
+        ns("organs"),
+        "Tissue / organ",
+        choices = organ_choices,
         multiple = TRUE,
-        options = list(placeholder = "All drugs")
+        options = list(placeholder = "All tissues")
+      ),
+      selectizeInput(
+        ns("drivers"),
+        "Driver mutation (gene)",
+        choices = driver_choices,
+        multiple = TRUE,
+        options = list(placeholder = "Any driver gene")
       ),
       selectizeInput(
         ns("cell_lines"),
         "Cell lines",
-        choices = cell_lines,
+        choices = assayed,
         multiple = TRUE,
-        options = list(placeholder = "All cell lines")
+        options = list(placeholder = "All (matching tissue/driver)")
+      ),
+      selectizeInput(
+        ns("drugs"),
+        "Drugs",
+        choices = drug_choices,
+        multiple = TRUE,
+        options = list(placeholder = "All drugs")
       ),
       selectizeInput(
         ns("doses"),
-        "Dose (concentration)",
-        choices = doses,
+        "Dose (µM)",
+        choices = dose_choices,
         multiple = TRUE,
         options = list(placeholder = "All doses")
       ),
       selectizeInput(
         ns("plates"),
         "Plates",
-        choices = plates,
+        choices = plate_choices,
         multiple = TRUE,
         options = list(placeholder = "All plates")
       ),
@@ -70,26 +106,30 @@ subset_builder_ui <- function(id) {
         ns("reset"),
         "Reset selection",
         class = "btn-sm btn-outline-secondary"
-      ),
-      if (remote) {
-        tagList(
-          tags$hr(),
-          tags$p(
-            class = "text-muted small",
-            "Cell counts query the remote dataset on demand."
-          ),
-          actionButton(
-            ns("estimate_cells"),
-            "Estimate cell count",
-            class = "btn-sm btn-primary"
-          )
-        )
-      }
+      )
     ),
     uiOutput(ns("coverage_boxes")),
-    bslib::card(
-      bslib::card_header("Matched samples"),
-      reactable::reactableOutput(ns("preview"))
+    div(
+      class = "text-muted small mb-2",
+      tags$strong("How the experiment is laid out: "),
+      "14 plates (96-well), each a batch of ~93–95 drug treatments; ",
+      tags$code("DMSO_TF"),
+      " is the vehicle control on every plate. Doses are 0.05 / 0.5 / 5 µM. ",
+      "All 50 cell lines are pooled into every sample, so tissue / driver / ",
+      "cell-line filters change the ",
+      tags$em("cell count"),
+      ", not the number of samples."
+    ),
+    bslib::layout_columns(
+      col_widths = c(7, 5),
+      bslib::card(
+        bslib::card_header("Cells in selection, by cell line"),
+        plotOutput(ns("live_plot"), height = 360)
+      ),
+      bslib::card(
+        bslib::card_header("Matched samples"),
+        reactable::reactableOutput(ns("preview"))
+      )
     ),
     bslib::card(
       bslib::card_header("Export subset and analysis recipe"),
@@ -100,11 +140,15 @@ subset_builder_ui <- function(id) {
 
 # Format an integer for a value box, with an em dash for NA / unknown.
 .subset_fmt <- function(x) {
+  if (length(x) != 1 || is.na(x)) "—" else format(x, big.mark = ",")
+}
+
+# Compact format for large counts (e.g. 28.5M) so value boxes don't wrap.
+.subset_fmt_big <- function(x) {
   if (length(x) != 1 || is.na(x)) {
-    "—"
-  } else {
-    format(x, big.mark = ",")
+    return("—")
   }
+  scales::label_number(accuracy = 0.1, scale_cut = scales::cut_short_scale())(x)
 }
 
 # Render a character vector as a single-quoted SQL IN list, e.g. ('a', 'b').
@@ -122,7 +166,8 @@ subset_builder_ui <- function(id) {
 
 # Render a character vector as a Python list literal, e.g. ["a", "b"].
 .subset_py_list <- function(x) {
-  paste0("[", paste(sprintf('"%s"', x), collapse = ", "), "]")
+  esc <- gsub('"', '\\\\"', x, perl = TRUE)
+  paste0("[", paste(sprintf('"%s"', esc), collapse = ", "), "]")
 }
 
 # Render a numeric vector as a Python list literal, e.g. [0.05, 5].
@@ -132,30 +177,105 @@ subset_builder_ui <- function(id) {
 
 subset_builder_server <- function(id) {
   moduleServer(id, function(input, output, session) {
-    remote <- reactive(identical(tahoe_obs_source()$type, "remote"))
+    grid <- reactive(tahoe_cell_grid())
+    driver_lines <- reactive(tahoe_cell_line())
 
-    sel_drugs <- reactive(input$drugs %||% character())
+    sel_organs <- reactive(input$organs %||% character())
+    sel_drivers <- reactive(input$drivers %||% character())
     sel_cell_lines <- reactive(input$cell_lines %||% character())
+    sel_drugs <- reactive(input$drugs %||% character())
     sel_doses <- reactive({
       d <- suppressWarnings(as.numeric(input$doses))
       d[!is.na(d)]
     })
     sel_plates <- reactive(input$plates %||% character())
 
-    observeEvent(input$reset, {
-      updateSelectizeInput(session, "drugs", selected = character())
-      updateSelectizeInput(session, "cell_lines", selected = character())
-      updateSelectizeInput(session, "doses", selected = character())
-      updateSelectizeInput(session, "plates", selected = character())
+    # Cell lines implied by the tissue + driver + explicit-cell-line filters,
+    # restricted to the assayed lines that actually appear in the data.
+    matched_cell_names <- reactive({
+      g <- grid()
+      names_out <- unique(g$cell_name)
+      if (length(sel_organs()) > 0 && "organ" %in% names(g)) {
+        names_out <- intersect(
+          names_out,
+          unique(g$cell_name[g$organ %in% sel_organs()])
+        )
+      }
+      if (length(sel_drivers()) > 0) {
+        dl <- driver_lines()
+        if (all(c("cell_name", "Driver_Gene_Symbol") %in% names(dl))) {
+          hit <- unique(dl$cell_name[dl$Driver_Gene_Symbol %in% sel_drivers()])
+          names_out <- intersect(names_out, hit)
+        }
+      }
+      if (length(sel_cell_lines()) > 0) {
+        names_out <- intersect(names_out, sel_cell_lines())
+      }
+      names_out
     })
 
-    # Rows of the sample table matching the selected drug / dose / plate.
-    # An empty selection means "no restriction" on that dimension. Cell lines
-    # are absent from the sample table, so they do not narrow this set.
+    # Keep the cell-line picker in sync with the tissue / driver filters.
+    observeEvent(
+      list(sel_organs(), sel_drivers()),
+      {
+        g <- grid()
+        choices <- sort(unique(g$cell_name))
+        if (length(sel_organs()) > 0 && "organ" %in% names(g)) {
+          choices <- sort(unique(g$cell_name[g$organ %in% sel_organs()]))
+        }
+        if (length(sel_drivers()) > 0) {
+          dl <- driver_lines()
+          hit <- unique(dl$cell_name[dl$Driver_Gene_Symbol %in% sel_drivers()])
+          choices <- intersect(choices, hit)
+        }
+        updateSelectizeInput(
+          session,
+          "cell_lines",
+          choices = choices,
+          selected = intersect(sel_cell_lines(), choices)
+        )
+      },
+      ignoreInit = TRUE
+    )
+
+    observeEvent(input$reset, {
+      for (ctrl in c(
+        "organs",
+        "drivers",
+        "cell_lines",
+        "drugs",
+        "doses",
+        "plates"
+      )) {
+        updateSelectizeInput(session, ctrl, selected = character())
+      }
+    })
+
+    # The cell grid narrowed by every active filter. Empty on a dimension means
+    # no restriction there.
+    grid_filtered <- reactive({
+      g <- grid()
+      if (nrow(g) == 0) {
+        return(g)
+      }
+      g <- g[g$cell_name %in% matched_cell_names(), , drop = FALSE]
+      if (length(sel_drugs()) > 0) {
+        g <- g[g$drug %in% sel_drugs(), , drop = FALSE]
+      }
+      if (length(sel_doses()) > 0) {
+        g <- g[!is.na(g$conc) & g$conc %in% sel_doses(), , drop = FALSE]
+      }
+      if (length(sel_plates()) > 0) {
+        g <- g[g$plate %in% sel_plates(), , drop = FALSE]
+      }
+      g
+    })
+
+    # Sample-level slice for the table and export: samples matching the drug /
+    # dose / plate dimensions (cell lines are pooled across all samples).
     matched_samples <- reactive({
       df <- tahoe_sample()
       keep <- rep(TRUE, nrow(df))
-
       if (length(sel_drugs()) > 0 && "drug" %in% names(df)) {
         keep <- keep & df$drug %in% sel_drugs()
       }
@@ -166,80 +286,66 @@ subset_builder_server <- function(id) {
         conc <- tahoe_parse_dose(df$drugname_drugconc)$conc
         keep <- keep & !is.na(conc) & conc %in% sel_doses()
       }
-
       df[keep, , drop = FALSE]
     })
 
-    # Cell-count estimate for the current selection. Sums the per-sample cell
-    # counts from the cell-level obs data, filtered by the whitelisted drug /
-    # plate dimensions. Returns NA on any error (e.g. remote unreachable).
-    estimate_cells <- function() {
-      res <- tahoe_obs_summary(
-        "sample",
-        filters = list(drug = sel_drugs(), plate = sel_plates()),
-        metric = "n_cells",
-        limit = NULL
-      )
-      if (!is.null(attr(res, "tahoe_error"))) {
-        return(NA_integer_)
-      }
-      as.integer(sum(res$value, na.rm = TRUE))
-    }
-
-    # Local / fixture: compute reactively. Remote: gate behind the button so
-    # nothing queries HuggingFace on load.
-    cell_estimate <- reactive({
-      if (remote()) {
-        return(NA_integer_)
-      }
-      estimate_cells()
-    })
-
-    cell_estimate_remote <- eventReactive(input$estimate_cells, {
-      estimate_cells()
-    })
-
-    n_cells <- reactive({
-      if (remote()) {
-        if (is.null(input$estimate_cells) || input$estimate_cells == 0) {
-          NA_integer_
-        } else {
-          cell_estimate_remote()
-        }
-      } else {
-        cell_estimate()
-      }
-    })
-
     output$coverage_boxes <- renderUI({
-      cells_label <- if (remote() && is.na(n_cells())) {
-        "Click to estimate"
-      } else {
-        .subset_fmt(n_cells())
-      }
+      g <- grid_filtered()
+      n_cells <- as.integer(sum(g$n_cells, na.rm = TRUE))
+      n_lines <- dplyr::n_distinct(g$cell_name)
+      n_drugs <- dplyr::n_distinct(g$drug)
+      n_samples <- nrow(matched_samples())
       bslib::layout_columns(
         fill = FALSE,
         bslib::value_box(
-          "Drugs selected",
-          .subset_fmt(length(sel_drugs())),
+          "Cells",
+          .subset_fmt_big(n_cells),
           theme = "primary"
         ),
         bslib::value_box(
-          "Cell lines selected",
-          .subset_fmt(length(sel_cell_lines())),
+          "Cell lines",
+          .subset_fmt(n_lines),
           theme = "primary"
         ),
         bslib::value_box(
-          "Matched samples",
-          .subset_fmt(nrow(matched_samples())),
+          "Drugs",
+          .subset_fmt(n_drugs),
           theme = "secondary"
         ),
         bslib::value_box(
-          "Estimated cells",
-          cells_label,
-          theme = "info"
+          "Samples",
+          .subset_fmt(n_samples),
+          theme = "secondary"
         )
       )
+    })
+
+    output$live_plot <- renderPlot({
+      g <- grid_filtered()
+      validate(need(
+        nrow(g) > 0 && sum(g$n_cells, na.rm = TRUE) > 0,
+        "No cells match the current selection."
+      ))
+      by_line <- stats::aggregate(n_cells ~ cell_name, data = g, FUN = sum)
+      by_line <- by_line[order(-by_line$n_cells), , drop = FALSE]
+      by_line <- utils::head(by_line, 25)
+      by_line$cell_name <- factor(
+        by_line$cell_name,
+        levels = rev(by_line$cell_name)
+      )
+      ggplot2::ggplot(
+        by_line,
+        ggplot2::aes(x = .data$cell_name, y = .data$n_cells)
+      ) +
+        ggplot2::geom_col(fill = "#0b7285") +
+        ggplot2::coord_flip() +
+        ggplot2::scale_y_continuous(
+          labels = scales::label_number(
+            scale_cut = scales::cut_short_scale()
+          )
+        ) +
+        ggplot2::labs(x = NULL, y = "Cells") +
+        ggplot2::theme_minimal(base_size = 13)
     })
 
     output$preview <- reactable::renderReactable({
@@ -249,29 +355,32 @@ subset_builder_server <- function(id) {
         striped = TRUE,
         highlight = TRUE,
         compact = TRUE,
-        defaultPageSize = 10,
+        defaultPageSize = 8,
         showPageSizeOptions = TRUE
       )
     })
 
-    # A copy-paste analysis recipe reproducing the selection on the full
-    # obs_metadata.parquet: an R (duckdb) snippet and a Python (pandas /
-    # pyarrow) snippet, both embedding the concrete selected values.
+    # Copy-paste recipe reproducing the selection on obs_metadata.parquet. The
+    # tissue / driver filters are resolved to their concrete cell_name set.
     recipe <- reactive({
       drugs <- sel_drugs()
-      cell_lines <- sel_cell_lines()
       doses <- sel_doses()
       plates <- sel_plates()
+      # Only constrain cell lines when the resolved set is a strict subset.
+      all_lines <- unique(grid()$cell_name)
+      lines <- matched_cell_names()
+      constrain_lines <- length(lines) > 0 &&
+        length(lines) < length(all_lines)
 
       if (
         length(drugs) == 0 &&
-          length(cell_lines) == 0 &&
           length(doses) == 0 &&
-          length(plates) == 0
+          length(plates) == 0 &&
+          !constrain_lines
       ) {
         return(paste(
           "No filters selected: this recipe would return the full dataset.",
-          "Pick at least one drug, cell line, dose, or plate to build a",
+          "Pick a tissue, driver, cell line, drug, dose, or plate to build a",
           "reproducible subset predicate."
         ))
       }
@@ -285,14 +394,14 @@ subset_builder_server <- function(id) {
           sprintf('df["drug"].isin(%s)', .subset_py_list(drugs))
         )
       }
-      if (length(cell_lines) > 0) {
+      if (constrain_lines) {
         r_where <- c(
           r_where,
-          sprintf("cell_name IN %s", .subset_sql_vec(cell_lines))
+          sprintf("cell_name IN %s", .subset_sql_vec(lines))
         )
         py_where <- c(
           py_where,
-          sprintf('df["cell_name"].isin(%s)', .subset_py_list(cell_lines))
+          sprintf('df["cell_name"].isin(%s)', .subset_py_list(lines))
         )
       }
       if (length(plates) > 0) {
@@ -303,18 +412,23 @@ subset_builder_server <- function(id) {
         )
       }
       if (length(doses) > 0) {
-        # Doses are embedded in drugname_drugconc; match on the parsed value.
         r_where <- c(
           r_where,
           sprintf(
-            "TRY_CAST(regexp_extract(drugname_drugconc, ',\\s*([0-9.eE+-]+)\\s*,', 1) AS DOUBLE) IN %s",
-            paste0("(", paste(format(doses, trim = TRUE), collapse = ", "), ")")
+            paste0(
+              "TRY_CAST(regexp_extract(drugname_drugconc, ",
+              "',\\s*([0-9.eE+-]+)\\s*,', 1) AS DOUBLE) IN (%s)"
+            ),
+            paste(format(doses, trim = TRUE), collapse = ", ")
           )
         )
         py_where <- c(
           py_where,
           sprintf(
-            'df["drugname_drugconc"].str.extract(r",\\s*([0-9.eE+-]+)\\s*,")[0].astype(float).isin(%s)',
+            paste0(
+              'df["drugname_drugconc"].str.extract(',
+              'r",\\s*([0-9.eE+-]+)\\s*,")[0].astype(float).isin(%s)'
+            ),
             .subset_py_num(doses)
           )
         )
@@ -335,19 +449,16 @@ subset_builder_server <- function(id) {
         "dbDisconnect(con, shutdown = TRUE)",
         sep = "\n"
       )
-
       py_snippet <- paste(
         "## Python (pandas / pyarrow) -----------------------------------",
         "import pandas as pd",
         "df = pd.read_parquet('obs_metadata.parquet')",
         sprintf("subset = df[(\n    %s\n)]", py_predicate),
         "",
-        "# scanpy / AnnData: the same boolean mask filters an AnnData's .obs,",
-        "# e.g.  adata = adata[subset.index]  (align on the obs index /",
-        "# BARCODE), or read the .h5ad and subset adata[adata.obs eval(...)].",
+        "# scanpy / AnnData: use the same mask on adata.obs, e.g.",
+        "# adata = adata[subset.index]  (align on the obs index / BARCODE).",
         sep = "\n"
       )
-
       paste(r_snippet, "", py_snippet, sep = "\n")
     })
 
@@ -358,6 +469,6 @@ subset_builder_server <- function(id) {
       recipe = recipe
     )
 
-    list(matched_samples = matched_samples, recipe = recipe)
+    list(matched_samples = matched_samples, grid_filtered = grid_filtered)
   })
 }
