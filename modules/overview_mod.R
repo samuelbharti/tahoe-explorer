@@ -49,34 +49,44 @@ overview_server <- function(id) {
 
     output$summary_boxes <- renderUI({
       cc <- counts()
-      obs_label <- switch(
+      fmt <- function(x) {
+        if (is.null(x) || is.na(x)) "—" else format(x, big.mark = ",")
+      }
+      fmt_big <- function(x) {
+        if (is.null(x) || is.na(x)) {
+          return("—")
+        }
+        scales::label_number(
+          accuracy = 0.1,
+          scale_cut = scales::cut_short_scale()
+        )(x)
+      }
+      # Cells and cell lines are computed from the obs data; note where from,
+      # since the annotation tables cannot report them accurately.
+      source_note <- switch(
         cc$obs_source,
-        local = "local file",
-        remote = "remote (HuggingFace)",
-        fixture = "demo fixture",
+        local = "Cells and cell lines from your local obs file.",
+        remote = paste(
+          "Cells and cell lines computed from the remote obs file",
+          "(HuggingFace)."
+        ),
+        fixture = paste(
+          "Showing synthetic demo fixtures — download the metadata for",
+          "real numbers (see the README)."
+        ),
         cc$obs_source
       )
-      data_label <- if (identical(cc$data_source, "real")) {
-        "Downloaded metadata"
-      } else {
-        "Synthetic demo fixtures"
-      }
-      fmt <- function(x) {
-        if (is.na(x)) "—" else format(x, big.mark = ",")
-      }
-      bslib::layout_columns(
-        fill = FALSE,
-        bslib::value_box("Drugs", fmt(cc$drugs), theme = "primary"),
-        bslib::value_box("Cell lines", fmt(cc$cell_lines), theme = "primary"),
-        bslib::value_box("Samples", fmt(cc$samples), theme = "secondary"),
-        bslib::value_box("Plates", fmt(cc$plates), theme = "secondary"),
-        bslib::value_box("Genes", fmt(cc$genes), theme = "secondary"),
-        bslib::value_box(
-          "Cell-level obs",
-          obs_label,
-          theme = "info",
-          p(class = "small mb-0", data_label)
-        )
+      tagList(
+        bslib::layout_columns(
+          fill = FALSE,
+          bslib::value_box("Cells", fmt_big(cc$cells), theme = "primary"),
+          bslib::value_box("Cell lines", fmt(cc$cell_lines), theme = "primary"),
+          bslib::value_box("Drugs", fmt(cc$drugs), theme = "primary"),
+          bslib::value_box("Samples", fmt(cc$samples), theme = "secondary"),
+          bslib::value_box("Plates", fmt(cc$plates), theme = "secondary"),
+          bslib::value_box("Genes", fmt(cc$genes), theme = "secondary")
+        ),
+        p(class = "text-muted small mt-2", source_note)
       )
     })
 

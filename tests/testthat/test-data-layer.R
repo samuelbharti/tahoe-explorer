@@ -42,22 +42,31 @@ test_that("tahoe_obs_summary applies whitelisted filters", {
 test_that("tahoe_summary_counts returns headline fields", {
   cc <- tahoe_summary_counts()
   expect_true(all(
-    c("drugs", "cell_lines", "samples", "plates", "genes", "obs_source") %in%
+    c(
+      "drugs",
+      "cell_lines",
+      "samples",
+      "plates",
+      "genes",
+      "cells",
+      "obs_source"
+    ) %in%
       names(cc)
   ))
   expect_gt(cc$drugs, 0)
   expect_identical(cc$obs_source, "fixture")
 })
 
-test_that("counts are of distinct entities, not raw metadata rows", {
-  cell <- tahoe_cell_line()
+test_that("cell line and cell counts come from the obs data, not tables", {
   cc <- tahoe_summary_counts()
+  by_line <- tahoe_obs_summary("cell_line", metric = "n_cells", limit = NULL)
 
-  # The cell_line table is driver-level (many rows per cell line), so the
-  # headline count must be distinct cell lines, strictly fewer than nrow().
-  expect_gt(nrow(cell), dplyr::n_distinct(cell$cell_name))
-  expect_equal(cc$cell_lines, dplyr::n_distinct(cell$cell_name))
-  expect_lt(cc$cell_lines, nrow(cell))
+  # Assayed cell lines = distinct cell lines present in obs; total cells = sum
+  # of the per-cell-line counts. Both must match the obs aggregation, not the
+  # (larger, driver-level) cell_line_metadata table.
+  expect_equal(cc$cell_lines, nrow(by_line))
+  expect_equal(cc$cells, sum(by_line$value))
+  expect_lt(cc$cell_lines, nrow(tahoe_cell_line()))
 })
 
 test_that("tahoe_cell_line_unique collapses to one row per cell line", {

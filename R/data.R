@@ -146,6 +146,30 @@ tahoe_obs_source <- function() {
   )
 }
 
+#' Obs source to use for the headline dataset counts (cells, cell lines).
+#' These are cheap aggregate queries, so prefer the real data: local file if
+#' present, else a remote scan when the small tables are real (the user has
+#' downloaded data and wants real numbers) or TAHOE_OBS_REMOTE is set, else the
+#' synthetic fixture (pure demo / offline / CI). See [tahoe_summary_counts()].
+.tahoe_obs_count_source <- function() {
+  local <- file.path(tahoe_data_dir(), "obs_metadata.parquet")
+  if (file.exists(local)) {
+    return(list(type = "local", src = local))
+  }
+  remote_env <- Sys.getenv("TAHOE_OBS_REMOTE", unset = "")
+  opted_remote <- nzchar(remote_env) &&
+    !identical(tolower(remote_env), "false") &&
+    remote_env != "0"
+  real_tables <- identical(attr(tahoe_drug(), "tahoe_source"), "real")
+  if (opted_remote || real_tables) {
+    return(list(type = "remote", src = .tahoe_obs_remote_url))
+  }
+  list(
+    type = "fixture",
+    src = file.path(tahoe_fixture_dir(), "obs_metadata.parquet")
+  )
+}
+
 # Ensure httpfs is available before querying a remote parquet.
 .tahoe_load_httpfs <- function() {
   if (isTRUE(.tahoe_cache$httpfs)) {
@@ -277,20 +301,58 @@ tahoe_cell_line_unique <- function() {
   dplyr::as_tibble(out)
 }
 
-#' Headline dataset counts for the Overview tab. Counts distinct entities
-#' (distinct cell lines, drugs, ...), not raw metadata rows.
+# Cells and distinct assayed cell lines from the obs data (the actual dataset),
+# cached. cell_line_metadata over-annotates (~102 lines) while only ~50 were
+# assayed, and the true cell count only exists in obs, so these must come from
+# obs rather than the annotation tables. Degrades to NA if obs is unreachable.
+.tahoe_obs_counts <- function() {
+  if (!is.null(.tahoe_cache$obs_counts)) {
+    return(.tahoe_cache$obs_counts)
+  }
+  source <- .tahoe_obs_count_source()
+  res <- tryCatch(
+    {
+      if (identical(source$type, "remote")) {
+        .tahoe_load_httpfs()
+      }
+      q <- DBI::dbGetQuery(
+        tahoe_con(),
+        sprintf(
+          paste0(
+            "SELECT count(*) AS cells, ",
+            "count(DISTINCT cell_line) AS cell_lines ",
+            "FROM read_parquet(%s)"
+          ),
+          .tahoe_quote(source$src)
+        )
+      )
+      list(cells = q$cells, cell_lines = q$cell_lines, type = source$type)
+    },
+    error = function(e) {
+      list(cells = NA_real_, cell_lines = NA_real_, type = source$type)
+    }
+  )
+  .tahoe_cache$obs_counts <- res
+  res
+}
+
+#' Headline dataset counts for the Overview tab. Drugs, samples, plates, and
+#' genes come from the (accurate) small tables; the count of assayed cell lines
+#' and total cells come from the obs data, since the annotation tables would
+#' otherwise overcount cell lines and cannot report the cell total.
 tahoe_summary_counts <- function() {
   drug <- tahoe_drug()
-  cell_line <- tahoe_cell_line()
   sample <- tahoe_sample()
   gene <- tahoe_gene()
+  obs <- .tahoe_obs_counts()
   list(
     drugs = .tahoe_n_distinct(drug, "drug"),
-    cell_lines = .tahoe_n_distinct(cell_line, "cell_name"),
+    cell_lines = obs$cell_lines,
     samples = .tahoe_n_distinct(sample, "sample"),
     plates = .tahoe_n_distinct(sample, "plate"),
     genes = .tahoe_n_distinct(gene, "gene_symbol"),
-    obs_source = tahoe_obs_source()$type,
+    cells = obs$cells,
+    obs_source = obs$type,
     data_source = attr(drug, "tahoe_source")
   )
 }
