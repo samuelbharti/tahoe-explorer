@@ -381,3 +381,61 @@ tahoe_summary_counts <- function() {
     data_source = attr(drug, "tahoe_source")
   )
 }
+
+#' Per (drug x cell line x plate x dose) cell-count grid, cached. This small
+#' aggregate (~66k rows for the real data) is derived once from the obs data so
+#' the subset builder can compute live, accurate cell counts locally without
+#' re-querying 100M cells. Reads a prebuilt <data_dir>/obs_cell_grid.parquet if
+#' present (written by dev/download_metadata.R), else computes it from the obs
+#' source. Joined to each cell line's organ and driver-gene summary.
+#'
+#' Columns: drug, cell_name, plate, conc, n_cells, organ, drivers.
+tahoe_cell_grid <- function() {
+  if (!is.null(.tahoe_cache$cell_grid)) {
+    return(.tahoe_cache$cell_grid)
+  }
+  grid_file <- file.path(tahoe_data_dir(), "obs_cell_grid.parquet")
+  base <- tryCatch(
+    {
+      if (file.exists(grid_file)) {
+        tahoe_read_file(grid_file)
+      } else {
+        source <- .tahoe_obs_count_source()
+        if (identical(source$type, "remote")) {
+          .tahoe_load_httpfs()
+        }
+        dplyr::as_tibble(DBI::dbGetQuery(
+          tahoe_con(),
+          sprintf(
+            paste0(
+              "SELECT drug, cell_name, plate, TRY_CAST(regexp_extract(",
+              "drugname_drugconc, ',\\s*([0-9.eE+-]+)\\s*,', 1) AS DOUBLE) ",
+              "AS conc, count(*) AS n_cells FROM read_parquet(%s) ",
+              "GROUP BY 1, 2, 3, 4"
+            ),
+            .tahoe_quote(source$src)
+          )
+        ))
+      }
+    },
+    error = function(e) NULL
+  )
+  if (is.null(base)) {
+    base <- dplyr::tibble(
+      drug = character(),
+      cell_name = character(),
+      plate = character(),
+      conc = numeric(),
+      n_cells = numeric()
+    )
+  }
+  lines <- tahoe_cell_line_unique()
+  cols <- intersect(c("cell_name", "Organ", "drivers"), names(lines))
+  if ("cell_name" %in% cols && "cell_name" %in% names(base)) {
+    ann <- lines[, cols, drop = FALSE]
+    names(ann)[names(ann) == "Organ"] <- "organ"
+    base <- dplyr::left_join(base, ann, by = "cell_name")
+  }
+  .tahoe_cache$cell_grid <- base
+  base
+}
