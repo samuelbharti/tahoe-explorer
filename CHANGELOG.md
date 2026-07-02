@@ -4,25 +4,17 @@ All notable changes to this project should be documented in this file.
 
 ## [Unreleased]
 
-## [2.2.0] - 2026-06-29
+### Added
 
-- Added GitHub Actions CI (lint, air format check, tests, markdownlint) and
-  pre-commit hooks.
-- Added air formatter and lintr configuration.
-- Added a test suite (testthat unit tests, `testServer`, and a shinytest2
-  smoke test).
-- Added brand.yml theming applied through bslib, with optional `thematic`
-  plot/table theming.
-- Added a template manifest (`template.yml`) and `dev/use_template.R`
-  scaffolding engine; published the repo as a GitHub template.
-- Added issue and pull request templates and a Contributor Covenant code of
-  conduct.
-- Fixed the app entry point and ensured `R/` utilities are sourced at startup.
+- Data access layer (`R/data.R`) backed by duckdb, reading Tahoe-100M metadata
+  with a synthetic-fixture fallback so the app runs offline.
+- Script to download metadata from HuggingFace (`dev/download_metadata.R`) and
+  to regenerate synthetic fixtures (`dev/make_fixtures.R`).
+- Page registry (`R/app_pages.R`) so feature tabs self-register.
+- Overview tab with dataset summary value boxes and quick charts.
+- Reusable export module (filtered CSV + parquet download).
+- CI: Conventional Commits PR-title lint and path-based PR auto-labeler.
 
-## [0.1.0] - 2026-05-01
+## [0.1.0]
 
-- Created base Shiny template structure.
-
-## [2.0.0] - 2026-05-02
-
-- Bumped template version to v2.0 and updated metadata (CITATION, README).
+- Initial Tahoe Explorer app scaffolded from the Shiny template.
