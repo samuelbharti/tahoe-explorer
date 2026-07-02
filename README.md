@@ -58,8 +58,28 @@ Configuration via environment variables (see `.Renviron.example`):
 - `TAHOE_METADATA_DIR` — directory holding downloaded metadata (default `data`).
 - `TAHOE_OBS_REMOTE` — set to `1` to query the cell-level `obs` table directly
   from HuggingFace (slower) instead of downloading it.
+- `HF_TOKEN` — optional HuggingFace token for better remote access (higher rate
+  limits, gated datasets). See below.
 
 Real data is never committed; only the synthetic fixtures are.
+
+### HuggingFace token (optional)
+
+The Tahoe-100M dataset is public, so no token is needed — but a token gives
+higher rate limits and more reliable remote reads. To add one:
+
+1. Create a token with **read** scope at
+   <https://huggingface.co/settings/tokens>.
+2. Copy `.Renviron.example` to `.Renviron` (git-ignored) and set:
+
+   ```sh
+   HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+
+3. Restart R. The app registers it as a duckdb HuggingFace secret for remote
+   `obs` queries, and `dev/download_metadata.R` sends it when downloading.
+
+`HUGGING_FACE_HUB_TOKEN` and `HUGGINGFACE_TOKEN` are also accepted.
 
 ## How To Run
 

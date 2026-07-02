@@ -29,6 +29,21 @@ want_obs <- "--obs" %in% args
 dest_dir <- Sys.getenv("TAHOE_METADATA_DIR", unset = "data")
 dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
 
+# Optional HuggingFace token for authenticated (higher rate limit / gated)
+# downloads. Read from the environment; never hard-code it.
+hf_token <- ""
+for (var in c("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HUGGINGFACE_TOKEN")) {
+  if (nzchar(Sys.getenv(var, unset = ""))) {
+    hf_token <- Sys.getenv(var)
+    break
+  }
+}
+dl_headers <- if (nzchar(hf_token)) {
+  c(Authorization = paste("Bearer", hf_token))
+} else {
+  character()
+}
+
 files <- if (want_obs) c(small_files, obs_file) else small_files
 
 fmt_size <- function(bytes) {
@@ -43,7 +58,13 @@ for (f in files) {
   cat(sprintf("Downloading %s -> %s\n", f, dest))
   ok <- tryCatch(
     {
-      utils::download.file(url, dest, mode = "wb", quiet = TRUE)
+      utils::download.file(
+        url,
+        dest,
+        mode = "wb",
+        quiet = TRUE,
+        headers = dl_headers
+      )
       TRUE
     },
     error = function(e) {

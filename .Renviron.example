@@ -8,3 +8,9 @@
 # Set to 1 to query the 2.29 GB cell-level obs table directly from HuggingFace
 # (slower) instead of downloading it. Leave unset to use a local file/fixture.
 # TAHOE_OBS_REMOTE=0
+
+# HuggingFace access token for better remote access (higher rate limits, and
+# gated datasets). Optional — the Tahoe-100M dataset is public. Create a token
+# with "read" scope at https://huggingface.co/settings/tokens and paste it
+# below (no quotes). This file is git-ignored, so the token is never committed.
+# HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

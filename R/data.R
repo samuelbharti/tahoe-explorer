@@ -36,11 +36,24 @@
   mean_mread_count = "avg(mread_count)"
 )
 
-# Remote location of the cell-level obs file (used only when opted in).
+# Remote location of the cell-level obs file (used only when opted in). Uses
+# duckdb's hf:// protocol, which works anonymously for this public dataset and
+# picks up a HuggingFace token (see .tahoe_hf_token) for authenticated access.
 .tahoe_obs_remote_url <- paste0(
-  "https://huggingface.co/datasets/vevotx/Tahoe-100M/",
-  "resolve/main/metadata/obs_metadata.parquet"
+  "hf://datasets/vevotx/Tahoe-100M/metadata/obs_metadata.parquet"
 )
+
+#' HuggingFace access token from the environment, or "" if unset. Checked in
+#' order; enables authenticated (higher rate limit / gated) remote access.
+tahoe_hf_token <- function() {
+  for (var in c("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HUGGINGFACE_TOKEN")) {
+    tok <- Sys.getenv(var, unset = "")
+    if (nzchar(tok)) {
+      return(tok)
+    }
+  }
+  ""
+}
 
 #' Directory holding downloaded metadata (TAHOE_METADATA_DIR or "data").
 tahoe_data_dir <- function() {
@@ -170,12 +183,24 @@ tahoe_obs_source <- function() {
   )
 }
 
-# Ensure httpfs is available before querying a remote parquet.
+# Ensure httpfs is available before querying a remote parquet, and register a
+# HuggingFace token as a duckdb secret when one is configured.
 .tahoe_load_httpfs <- function() {
   if (isTRUE(.tahoe_cache$httpfs)) {
     return(invisible(TRUE))
   }
-  DBI::dbExecute(tahoe_con(), "INSTALL httpfs; LOAD httpfs;")
+  con <- tahoe_con()
+  DBI::dbExecute(con, "INSTALL httpfs; LOAD httpfs;")
+  token <- tahoe_hf_token()
+  if (nzchar(token)) {
+    DBI::dbExecute(
+      con,
+      sprintf(
+        "CREATE OR REPLACE SECRET tahoe_hf (TYPE HUGGINGFACE, TOKEN %s)",
+        .tahoe_quote(token)
+      )
+    )
+  }
   .tahoe_cache$httpfs <- TRUE
   invisible(TRUE)
 }
