@@ -81,3 +81,59 @@ cat(sprintf("\nMetadata downloaded to '%s' (gitignored).\n", dest_dir))
 if (!want_obs) {
   cat("Re-run with --obs to also fetch the 2.29 GB cell-level obs file.\n")
 }
+
+# Build the per (drug x cell line x plate x dose) cell-count grid the subset
+# builder uses for live cell counts. Reads the local obs file if it was
+# downloaded, otherwise scans the remote obs (one pass, ~30s). Skipped if the
+# duckdb package is unavailable.
+if (requireNamespace("duckdb", quietly = TRUE)) {
+  local_obs <- file.path(dest_dir, obs_file)
+  grid_dest <- file.path(dest_dir, "obs_cell_grid.parquet")
+  cat("\nBuilding cell-count grid ->", grid_dest, "\n")
+  ok <- tryCatch(
+    {
+      con <- DBI::dbConnect(duckdb::duckdb())
+      on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+      if (file.exists(local_obs)) {
+        src <- local_obs
+      } else {
+        DBI::dbExecute(con, "INSTALL httpfs; LOAD httpfs;")
+        if (nzchar(hf_token)) {
+          DBI::dbExecute(
+            con,
+            sprintf(
+              "CREATE OR REPLACE SECRET dl_hf (TYPE HUGGINGFACE, TOKEN '%s')",
+              gsub("'", "''", hf_token, fixed = TRUE)
+            )
+          )
+        }
+        src <- paste0(
+          "hf://datasets/vevotx/Tahoe-100M/metadata/",
+          obs_file
+        )
+        cat("  (scanning remote obs; this takes ~30s)\n")
+      }
+      DBI::dbExecute(
+        con,
+        sprintf(
+          paste0(
+            "COPY (SELECT drug, cell_name, plate, TRY_CAST(regexp_extract(",
+            "drugname_drugconc, ',\\s*([0-9.eE+-]+)\\s*,', 1) AS DOUBLE) AS ",
+            "conc, count(*) AS n_cells FROM read_parquet('%s') GROUP BY ",
+            "1, 2, 3, 4) TO '%s' (FORMAT PARQUET)"
+          ),
+          src,
+          grid_dest
+        )
+      )
+      TRUE
+    },
+    error = function(e) {
+      cat(sprintf("  grid build skipped: %s\n", conditionMessage(e)))
+      FALSE
+    }
+  )
+  if (ok && file.exists(grid_dest)) {
+    cat(sprintf("  done (%s)\n", fmt_size(file.info(grid_dest)$size)))
+  }
+}

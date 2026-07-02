@@ -69,6 +69,20 @@ test_that("cell line and cell counts come from the obs data, not tables", {
   expect_lt(cc$cell_lines, nrow(tahoe_cell_line()))
 })
 
+test_that("tahoe_cell_grid aggregates obs and reconciles with the counts", {
+  grid <- tahoe_cell_grid()
+  expect_true(all(
+    c("drug", "cell_name", "plate", "conc", "n_cells") %in% names(grid)
+  ))
+  expect_gt(nrow(grid), 0)
+  expect_true(all(grid$n_cells > 0))
+
+  cc <- tahoe_summary_counts()
+  # The grid is a full partition of the obs cells, so totals must reconcile.
+  expect_equal(sum(grid$n_cells), cc$cells)
+  expect_equal(dplyr::n_distinct(grid$cell_name), cc$cell_lines)
+})
+
 test_that("tahoe_cell_line_unique collapses to one row per cell line", {
   u <- tahoe_cell_line_unique()
   expect_equal(nrow(u), dplyr::n_distinct(tahoe_cell_line()$cell_name))
