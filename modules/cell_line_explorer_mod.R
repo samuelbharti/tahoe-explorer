@@ -129,8 +129,23 @@ cell_line_explorer_server <- function(id) {
       df
     })
 
+    # Collapse the matched driver-level rows to one row per cell line (with a
+    # drivers summary) for the table, organ chart, and export, so "cell lines"
+    # counts distinct lines rather than the driver-level rows of the source
+    # table. The driver-gene and variant-type charts keep the driver-level
+    # `filtered` set below.
+    filtered_lines <- reactive({
+      names_matched <- unique(filtered()$cell_name)
+      unique_lines <- tahoe_cell_line_unique()
+      unique_lines[
+        unique_lines$cell_name %in% names_matched,
+        ,
+        drop = FALSE
+      ]
+    })
+
     output$table <- reactable::renderReactable({
-      df <- filtered()
+      df <- filtered_lines()
       validate(need(nrow(df) > 0, "No cell lines match the current filters."))
 
       # Turn the DepMap ID into a clickable portal link when present, keeping
@@ -168,7 +183,7 @@ cell_line_explorer_server <- function(id) {
     })
 
     output$organ_plot <- renderPlot({
-      df <- filtered()
+      df <- filtered_lines()
       validate(need(nrow(df) > 0, "No cell lines match the current filters."))
       .cell_line_bar(df, "Organ", "#41ab5d")
     })
@@ -187,11 +202,12 @@ cell_line_explorer_server <- function(id) {
 
     subset_export_server(
       "export",
-      data_reactive = filtered,
+      data_reactive = filtered_lines,
       file_stem = "cell_lines_subset"
     )
 
-    # Expose the filtered reactive so callers (and tests) can consume it.
-    filtered
+    # Expose the collapsed one-row-per-cell-line reactive for callers; the
+    # driver-level `filtered` remains available in-scope for tests.
+    filtered_lines
   })
 }

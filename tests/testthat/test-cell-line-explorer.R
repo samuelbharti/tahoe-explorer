@@ -90,3 +90,20 @@ test_that("no rows match an impossible filter", {
     expect_equal(nrow(filtered()), 0)
   })
 })
+
+test_that("the table/export view has one row per distinct cell line", {
+  testServer(cell_line_explorer_server, {
+    session$setInputs(
+      organ = character(),
+      gene = character(),
+      var_type = character(),
+      cell_name = ""
+    )
+    lines <- filtered_lines()
+    # Source table is driver-level (more rows than distinct cell lines); the
+    # collapsed view must have exactly one row per distinct cell line.
+    expect_false(any(duplicated(lines$cell_name)))
+    expect_equal(nrow(lines), dplyr::n_distinct(tahoe_cell_line()$cell_name))
+    expect_lt(nrow(lines), nrow(filtered()))
+  })
+})
