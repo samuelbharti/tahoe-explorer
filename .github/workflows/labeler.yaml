@@ -1,0 +1,20 @@
+# Auto-label pull requests based on the files they change (see labeler.yml).
+# Uses pull_request_target so it runs with the base-branch config; it therefore
+# takes effect once this workflow is on the default branch.
+name: Labeler
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          sync-labels: true

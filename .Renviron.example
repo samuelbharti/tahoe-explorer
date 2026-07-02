@@ -1,7 +1,16 @@
 # Example environment file. Copy to `.Renviron` (which is git-ignored) and fill
 # in real values. R reads `.Renviron` automatically on startup.
-#
-# Examples:
-# APP_DATA_DIR=data
-# DATABASE_URL=postgres://user:pass@host:5432/dbname
-# API_TOKEN=replace-me
+
+# Directory holding downloaded Tahoe-100M metadata parquet files.
+# Defaults to "data" (gitignored). Falls back to synthetic fixtures if empty.
+# TAHOE_METADATA_DIR=data
+
+# Set to 1 to query the 2.29 GB cell-level obs table directly from HuggingFace
+# (slower) instead of downloading it. Leave unset to use a local file/fixture.
+# TAHOE_OBS_REMOTE=0
+
+# HuggingFace access token for better remote access (higher rate limits, and
+# gated datasets). Optional — the Tahoe-100M dataset is public. Create a token
+# with "read" scope at https://huggingface.co/settings/tokens and paste it
+# below (no quotes). This file is git-ignored, so the token is never committed.
+# HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

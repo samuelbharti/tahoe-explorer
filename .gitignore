@@ -13,3 +13,18 @@ renv/staging/
 
 # Local development helpers
 dev/.Rhistory
+
+# Downloaded Tahoe metadata — never commit real data (only synthetic fixtures)
+/data/**
+!/data/.gitkeep
+!/data/fixtures/
+!/data/fixtures/**
+
+# Local working docs and tooling (not committed)
+docs/plans/
+.claude/
+
+# Scratch / temp
+*.local
+scratch/
+.DS_Store

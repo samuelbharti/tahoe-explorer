@@ -1,4 +1,4 @@
-# Shiny Server
+# App server. Each registered page mounts its own module server(s).
 function(input, output, session) {
-  example_counter_server("home_counter")
+  mount_page_servers()
 }
