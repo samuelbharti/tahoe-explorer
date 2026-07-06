@@ -31,15 +31,10 @@
   )
   ggplot2::ggplot(plot_df, ggplot2::aes(x = label, y = n)) +
     ggplot2::geom_col(fill = fill) +
-    ggplot2::geom_text(
-      ggplot2::aes(label = n),
-      hjust = -0.15,
-      size = 3.2
-    ) +
     ggplot2::coord_flip() +
     ggplot2::scale_y_continuous(expand = ggplot2::expansion(c(0, 0.12))) +
     ggplot2::labs(x = NULL, y = "Count") +
-    ggplot2::theme_minimal(base_size = 13)
+    tahoe_theme()
 }
 
 cell_line_explorer_ui <- function(id) {
@@ -86,16 +81,16 @@ cell_line_explorer_ui <- function(id) {
       col_widths = c(6, 6),
       bslib::card(
         bslib::card_header("Cell lines by organ"),
-        plotOutput(ns("organ_plot"), height = 320)
+        plotly::plotlyOutput(ns("organ_plot"), height = 320)
       ),
       bslib::card(
         bslib::card_header("Top driver genes"),
-        plotOutput(ns("gene_plot"), height = 320)
+        plotly::plotlyOutput(ns("gene_plot"), height = 320)
       )
     ),
     bslib::card(
       bslib::card_header("Variant-type breakdown"),
-      plotOutput(ns("var_type_plot"), height = 300)
+      plotly::plotlyOutput(ns("var_type_plot"), height = 300)
     )
   )
 }
@@ -182,22 +177,22 @@ cell_line_explorer_server <- function(id) {
       )
     })
 
-    output$organ_plot <- renderPlot({
+    output$organ_plot <- plotly::renderPlotly({
       df <- filtered_lines()
       validate(need(nrow(df) > 0, "No cell lines match the current filters."))
-      .cell_line_bar(df, "Organ", "#41ab5d")
+      tahoe_plotly(.cell_line_bar(df, "Organ", tahoe_colors$green))
     })
 
-    output$gene_plot <- renderPlot({
+    output$gene_plot <- plotly::renderPlotly({
       df <- filtered()
       validate(need(nrow(df) > 0, "No cell lines match the current filters."))
-      .cell_line_bar(df, "Driver_Gene_Symbol", "#2c7fb8")
+      tahoe_plotly(.cell_line_bar(df, "Driver_Gene_Symbol", tahoe_colors$blue))
     })
 
-    output$var_type_plot <- renderPlot({
+    output$var_type_plot <- plotly::renderPlotly({
       df <- filtered()
       validate(need(nrow(df) > 0, "No cell lines match the current filters."))
-      .cell_line_bar(df, "Driver_VarType", "#d95f0e")
+      tahoe_plotly(.cell_line_bar(df, "Driver_VarType", tahoe_colors$orange))
     })
 
     subset_export_server(

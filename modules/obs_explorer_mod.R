@@ -63,7 +63,7 @@
       expand = ggplot2::expansion(c(0, 0.08))
     ) +
     ggplot2::labs(x = NULL, y = x_title) +
-    ggplot2::theme_minimal(base_size = 13)
+    tahoe_theme()
 }
 
 # Histogram of one numeric column, precomputed into a tidy frame.
@@ -74,7 +74,7 @@
     ggplot2::geom_histogram(bins = 20, fill = fill, colour = "white") +
     ggplot2::scale_x_continuous(labels = scales::label_comma()) +
     ggplot2::labs(x = x_title, y = "Samples") +
-    ggplot2::theme_minimal(base_size = 13)
+    tahoe_theme()
 }
 
 obs_explorer_ui <- function(id) {
@@ -105,19 +105,19 @@ obs_explorer_ui <- function(id) {
         col_widths = c(6, 6),
         bslib::card(
           bslib::card_header("Samples per plate"),
-          plotOutput(ns("plate_plot"), height = 280)
+          plotly::plotlyOutput(ns("plate_plot"), height = 280)
         ),
         bslib::card(
           bslib::card_header("Samples per drug (top 12)"),
-          plotOutput(ns("drug_plot"), height = 280)
+          plotly::plotlyOutput(ns("drug_plot"), height = 280)
         ),
         bslib::card(
           bslib::card_header("Distribution of mean % mito"),
-          plotOutput(ns("mito_plot"), height = 260)
+          plotly::plotlyOutput(ns("mito_plot"), height = 260)
         ),
         bslib::card(
           bslib::card_header("Distribution of mean transcript count"),
-          plotOutput(ns("tscp_plot"), height = 260)
+          plotly::plotlyOutput(ns("tscp_plot"), height = 260)
         )
       ),
       bslib::card(
@@ -170,7 +170,7 @@ obs_explorer_ui <- function(id) {
       ),
       bslib::card(
         bslib::card_header("Summary"),
-        plotOutput(ns("obs_plot"), height = 320)
+        plotly::plotlyOutput(ns("obs_plot"), height = 320)
       ),
       bslib::card(
         bslib::card_header("Summary table"),
@@ -239,7 +239,7 @@ obs_explorer_server <- function(id) {
       df
     })
 
-    output$plate_plot <- renderPlot({
+    output$plate_plot <- plotly::renderPlotly({
       df <- samples_filtered()
       counts <- sort(table(df$plate), decreasing = TRUE)
       plot_df <- data.frame(
@@ -247,10 +247,10 @@ obs_explorer_server <- function(id) {
         value = as.integer(counts),
         stringsAsFactors = FALSE
       )
-      .obs_bar(plot_df, "#2c7fb8", "Samples")
+      tahoe_plotly(.obs_bar(plot_df, tahoe_colors$primary, "Samples"))
     })
 
-    output$drug_plot <- renderPlot({
+    output$drug_plot <- plotly::renderPlotly({
       df <- samples_filtered()
       counts <- utils::head(sort(table(df$drug), decreasing = TRUE), 12)
       plot_df <- data.frame(
@@ -258,18 +258,26 @@ obs_explorer_server <- function(id) {
         value = as.integer(counts),
         stringsAsFactors = FALSE
       )
-      .obs_bar(plot_df, "#41ab5d", "Samples")
+      tahoe_plotly(.obs_bar(plot_df, tahoe_colors$green, "Samples"))
     })
 
-    output$mito_plot <- renderPlot({
-      .obs_hist(samples_filtered()$mean_pcnt_mito, "#d95f0e", "Mean % mito")
+    output$mito_plot <- plotly::renderPlotly({
+      tahoe_plotly(
+        .obs_hist(
+          samples_filtered()$mean_pcnt_mito,
+          tahoe_colors$blue,
+          "Mean % mito"
+        )
+      )
     })
 
-    output$tscp_plot <- renderPlot({
-      .obs_hist(
-        samples_filtered()$mean_tscp_count,
-        "#756bb1",
-        "Mean transcript count"
+    output$tscp_plot <- plotly::renderPlotly({
+      tahoe_plotly(
+        .obs_hist(
+          samples_filtered()$mean_tscp_count,
+          tahoe_colors$violet,
+          "Mean transcript count"
+        )
       )
     })
 
@@ -380,11 +388,11 @@ obs_explorer_server <- function(id) {
       )
     })
 
-    output$obs_plot <- renderPlot({
+    output$obs_plot <- plotly::renderPlotly({
       metric_label <- names(.obs_metric_choices)[
         match(input$obs_metric, .obs_metric_choices)
       ]
-      .obs_bar(obs_plot_df(), "#238b45", metric_label)
+      tahoe_plotly(.obs_bar(obs_plot_df(), tahoe_colors$sand, metric_label))
     })
 
     output$obs_table <- reactable::renderReactable({

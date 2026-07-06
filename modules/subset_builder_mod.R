@@ -124,7 +124,7 @@ subset_builder_ui <- function(id) {
       col_widths = c(7, 5),
       bslib::card(
         bslib::card_header("Cells in selection, by cell line"),
-        plotOutput(ns("live_plot"), height = 360)
+        plotly::plotlyOutput(ns("live_plot"), height = 360)
       ),
       bslib::card(
         bslib::card_header("Matched samples"),
@@ -320,7 +320,7 @@ subset_builder_server <- function(id) {
       )
     })
 
-    output$live_plot <- renderPlot({
+    output$live_plot <- plotly::renderPlotly({
       g <- grid_filtered()
       validate(need(
         nrow(g) > 0 && sum(g$n_cells, na.rm = TRUE) > 0,
@@ -333,11 +333,11 @@ subset_builder_server <- function(id) {
         by_line$cell_name,
         levels = rev(by_line$cell_name)
       )
-      ggplot2::ggplot(
+      p <- ggplot2::ggplot(
         by_line,
         ggplot2::aes(x = .data$cell_name, y = .data$n_cells)
       ) +
-        ggplot2::geom_col(fill = "#0b7285") +
+        ggplot2::geom_col(fill = tahoe_colors$primary) +
         ggplot2::coord_flip() +
         ggplot2::scale_y_continuous(
           labels = scales::label_number(
@@ -345,7 +345,8 @@ subset_builder_server <- function(id) {
           )
         ) +
         ggplot2::labs(x = NULL, y = "Cells") +
-        ggplot2::theme_minimal(base_size = 13)
+        tahoe_theme()
+      tahoe_plotly(p)
     })
 
     output$preview <- reactable::renderReactable({
