@@ -38,11 +38,10 @@
   )
   ggplot2::ggplot(plot_df, ggplot2::aes(x = label, y = n)) +
     ggplot2::geom_col(fill = fill) +
-    ggplot2::geom_text(ggplot2::aes(label = n), hjust = -0.15, size = 3.2) +
     ggplot2::coord_flip() +
     ggplot2::scale_y_continuous(expand = ggplot2::expansion(c(0, 0.12))) +
     ggplot2::labs(x = NULL, y = "Count") +
-    ggplot2::theme_minimal(base_size = 13)
+    tahoe_theme()
 }
 
 # Horizontal bar chart of the top-N most frequent targets in `df`.
@@ -61,11 +60,10 @@
   )
   ggplot2::ggplot(plot_df, ggplot2::aes(x = label, y = n)) +
     ggplot2::geom_col(fill = fill) +
-    ggplot2::geom_text(ggplot2::aes(label = n), hjust = -0.15, size = 3.2) +
     ggplot2::coord_flip() +
     ggplot2::scale_y_continuous(expand = ggplot2::expansion(c(0, 0.12))) +
     ggplot2::labs(x = NULL, y = "Drugs") +
-    ggplot2::theme_minimal(base_size = 13)
+    tahoe_theme()
 }
 
 drug_explorer_ui <- function(id) {
@@ -100,18 +98,18 @@ drug_explorer_ui <- function(id) {
       col_widths = c(6, 6),
       bslib::card(
         bslib::card_header("Drugs by mechanism (MOA, broad)"),
-        plotOutput(ns("moa_broad_plot"), height = 300)
+        plotly::plotlyOutput(ns("moa_broad_plot"), height = 300)
       ),
       bslib::card(
         bslib::card_header("Approval status"),
-        plotOutput(ns("approval_plot"), height = 300)
+        plotly::plotlyOutput(ns("approval_plot"), height = 300)
       )
     ),
     bslib::layout_columns(
       col_widths = c(6, 6),
       bslib::card(
         bslib::card_header("Top targets"),
-        plotOutput(ns("targets_plot"), height = 300)
+        plotly::plotlyOutput(ns("targets_plot"), height = 300)
       ),
       bslib::card(
         bslib::card_header("Export current subset"),
@@ -252,16 +250,24 @@ drug_explorer_server <- function(id) {
       )
     })
 
-    output$moa_broad_plot <- renderPlot({
-      .drug_count_bar(filtered(), "moa-broad", "#2c7fb8")
+    output$moa_broad_plot <- plotly::renderPlotly({
+      tahoe_plotly(.drug_count_bar(
+        filtered(),
+        "moa-broad",
+        tahoe_colors$primary
+      ))
     })
 
-    output$approval_plot <- renderPlot({
-      .drug_count_bar(filtered(), "human-approved", "#41ab5d")
+    output$approval_plot <- plotly::renderPlotly({
+      tahoe_plotly(.drug_count_bar(
+        filtered(),
+        "human-approved",
+        tahoe_colors$green
+      ))
     })
 
-    output$targets_plot <- renderPlot({
-      .drug_target_bar(filtered(), "#d95f0e")
+    output$targets_plot <- plotly::renderPlotly({
+      tahoe_plotly(.drug_target_bar(filtered(), tahoe_colors$sand))
     })
 
     subset_export_server(

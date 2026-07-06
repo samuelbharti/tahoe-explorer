@@ -1,29 +1,39 @@
 # Brand configuration: the app's colors, fonts, and logo in one place.
 # Consumed automatically by bslib via `bs_theme(brand = TRUE)` (see ui.R).
-# Edit these values to match your brand. Spec: https://posit-dev.github.io/brand-yml/
+# "Alpine Lake" palette, evoking Lake Tahoe: deep lake teal, evergreen, sky,
+# sandstone, over granite/snow neutrals. Spec: https://posit-dev.github.io/brand-yml/
 
 meta:
   name: Tahoe Explorer
 
 color:
   palette:
-    teal: "#0b7285"
-    blue: "#1c7ed6"
-    gray: "#5b6770"
+    teal: "#0B7285" # deep lake water
+    green: "#2F9E44" # evergreen
+    blue: "#1C7ED6" # sky / open water
+    sand: "#E8A317" # shoreline sandstone
+    slate: "#5F6B7A" # granite
+    granite: "#212529" # dark rock (text)
+    snow: "#F8FAFB" # snow / background
   primary: teal
-  secondary: gray
+  secondary: slate
+  success: green
   info: blue
-  foreground: "#1a1a1a"
-  background: "#ffffff"
+  warning: sand
+  foreground: granite
+  background: snow
 
 typography:
   fonts:
     - family: Inter
       source: google
       weight: [400, 500, 600, 700]
+    - family: Space Grotesk
+      source: google
+      weight: [500, 600, 700]
   base:
     family: Inter
     size: 16px
   headings:
-    family: Inter
+    family: Space Grotesk
     weight: 600
