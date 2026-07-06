@@ -41,6 +41,7 @@ jobs:
             any::reactable
             any::plotly
             any::duckdb
+            any::DiagrammeR
       - name: Lint
         run: |
           lints <- lintr::lint_dir(".")
@@ -79,6 +80,7 @@ jobs:
             any::reactable
             any::plotly
             any::duckdb
+            any::DiagrammeR
             any::shinytest2
             any::testthat
       - name: Run tests (app smoke test)
