@@ -466,3 +466,30 @@ tahoe_cell_grid <- function() {
   .tahoe_cache$cell_grid <- base
   base
 }
+
+#' Coverage summary derived from the cell grid: total cells per (drug x cell
+#' line), the set of non-zero doses tested, how many of the 3 doses are present,
+#' and the number of plates. Powers the coverage matrix and QC views. `DMSO_TF`
+#' (the vehicle control, dose 0) is kept — its coverage matters for QC.
+tahoe_coverage <- function() {
+  g <- tahoe_cell_grid()
+  if (nrow(g) == 0) {
+    return(dplyr::tibble(
+      drug = character(),
+      cell_name = character(),
+      organ = character(),
+      n_cells = numeric(),
+      n_doses = integer(),
+      doses = character(),
+      n_plates = integer()
+    ))
+  }
+  dplyr::summarise(
+    dplyr::group_by(g, drug, cell_name, organ),
+    n_cells = sum(n_cells),
+    n_doses = dplyr::n_distinct(conc[conc > 0]),
+    doses = paste(sort(unique(conc[conc > 0])), collapse = ", "),
+    n_plates = dplyr::n_distinct(plate),
+    .groups = "drop"
+  )
+}
