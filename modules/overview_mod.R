@@ -35,7 +35,7 @@ overview_ui <- function(id) {
     bslib::layout_columns(
       col_widths = c(5, 7),
       bslib::card(
-        height = 460,
+        height = "44vh",
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
           span("Cell lines by organ"),
@@ -49,13 +49,14 @@ overview_ui <- function(id) {
             title = "Cell lines by organ"
           )
         ),
-        plotly::plotlyOutput(ns("organ_plot"), height = 360),
+        plotly::plotlyOutput(ns("organ_plot"), height = "37vh"),
         bslib::card_footer(
           class = "text-muted small",
           "Click a bar to filter · click it again to clear."
         )
       ),
       bslib::card(
+        height = "44vh",
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
           div(
@@ -283,15 +284,18 @@ overview_server <- function(id) {
         ),
         cc$obs_source
       )
+      vb <- function(title, value, theme) {
+        bslib::value_box(title, value, theme = theme, height = "96px")
+      }
       tagList(
         bslib::layout_columns(
           fill = FALSE,
-          bslib::value_box("Cells", fmt_big(cc$cells), theme = "primary"),
-          bslib::value_box("Cell lines", fmt(cc$cell_lines), theme = "primary"),
-          bslib::value_box("Drugs", fmt(cc$drugs), theme = "primary"),
-          bslib::value_box("Samples", fmt(cc$samples), theme = "secondary"),
-          bslib::value_box("Plates", fmt(cc$plates), theme = "secondary"),
-          bslib::value_box("Genes", fmt(cc$genes), theme = "secondary")
+          vb("Cells", fmt_big(cc$cells), "primary"),
+          vb("Cell lines", fmt(cc$cell_lines), "primary"),
+          vb("Drugs", fmt(cc$drugs), "primary"),
+          vb("Samples", fmt(cc$samples), "secondary"),
+          vb("Plates", fmt(cc$plates), "secondary"),
+          vb("Genes", fmt(cc$genes), "secondary")
         ),
         p(class = "text-muted small mt-2", source_note)
       )
@@ -404,7 +408,9 @@ overview_server <- function(id) {
         df,
         columns = col_defs,
         selection = "single",
-        onClick = "select"
+        onClick = "select",
+        pagination = FALSE,
+        height = "30vh"
       )
     })
 
