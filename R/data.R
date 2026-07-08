@@ -493,3 +493,27 @@ tahoe_coverage <- function() {
     .groups = "drop"
   )
 }
+
+#' Analysis conditions from the cell grid: cells per (drug x cell line x dose),
+#' summed over plates. This is the unit most differential analyses compare, so
+#' it is the natural grain for power / low-n QC. `conc == 0` rows are the DMSO
+#' vehicle control.
+tahoe_conditions <- function() {
+  g <- tahoe_cell_grid()
+  if (nrow(g) == 0) {
+    return(dplyr::tibble(
+      drug = character(),
+      cell_name = character(),
+      organ = character(),
+      conc = numeric(),
+      n_cells = numeric(),
+      n_plates = integer()
+    ))
+  }
+  dplyr::summarise(
+    dplyr::group_by(g, drug, cell_name, organ, conc),
+    n_cells = sum(n_cells),
+    n_plates = dplyr::n_distinct(plate),
+    .groups = "drop"
+  )
+}
