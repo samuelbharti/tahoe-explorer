@@ -334,6 +334,33 @@ tahoe_cell_line_unique <- function() {
   if (!is.null(.tahoe_cache$obs_counts)) {
     return(.tahoe_cache$obs_counts)
   }
+  # Prefer the prebuilt cell grid: it is derived from the same obs data and
+  # yields the identical headline totals (sum of cells, distinct cell lines)
+  # from a tiny local file, avoiding a slow remote DISTINCT scan of 100M rows.
+  grid_file <- file.path(tahoe_data_dir(), "obs_cell_grid.parquet")
+  if (file.exists(grid_file)) {
+    grid_res <- tryCatch(
+      {
+        q <- DBI::dbGetQuery(
+          tahoe_con(),
+          sprintf(
+            paste0(
+              "SELECT sum(n_cells) AS cells, ",
+              "count(DISTINCT cell_name) AS cell_lines ",
+              "FROM read_parquet(%s)"
+            ),
+            .tahoe_quote(grid_file)
+          )
+        )
+        list(cells = q$cells, cell_lines = q$cell_lines, type = "grid")
+      },
+      error = function(e) NULL
+    )
+    if (!is.null(grid_res) && !is.na(grid_res$cells)) {
+      .tahoe_cache$obs_counts <- grid_res
+      return(grid_res)
+    }
+  }
   source <- .tahoe_obs_count_source()
   res <- tryCatch(
     {

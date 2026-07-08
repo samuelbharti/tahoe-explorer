@@ -54,18 +54,25 @@ test_that("tahoe_summary_counts returns headline fields", {
       names(cc)
   ))
   expect_gt(cc$drugs, 0)
-  expect_identical(cc$obs_source, "fixture")
+  # "fixture" offline/CI; "grid"/"local"/"remote" when real metadata is present.
+  expect_true(cc$obs_source %in% c("fixture", "grid", "local", "remote"))
 })
 
 test_that("cell line and cell counts come from the obs data, not tables", {
   cc <- tahoe_summary_counts()
-  by_line <- tahoe_obs_summary("cell_line", metric = "n_cells", limit = NULL)
 
   # Assayed cell lines = distinct cell lines present in obs; total cells = sum
-  # of the per-cell-line counts. Both must match the obs aggregation, not the
-  # (larger, driver-level) cell_line_metadata table.
-  expect_equal(cc$cell_lines, nrow(by_line))
-  expect_equal(cc$cells, sum(by_line$value))
+  # of the per-cell-line counts. Reconcile against whichever obs-level source
+  # drives the counts (never the larger, driver-level cell_line_metadata table).
+  if (identical(cc$obs_source, "grid")) {
+    grid <- tahoe_cell_grid()
+    expect_equal(cc$cell_lines, dplyr::n_distinct(grid$cell_name))
+    expect_equal(cc$cells, sum(grid$n_cells))
+  } else {
+    by_line <- tahoe_obs_summary("cell_line", metric = "n_cells", limit = NULL)
+    expect_equal(cc$cell_lines, nrow(by_line))
+    expect_equal(cc$cells, sum(by_line$value))
+  }
   expect_lt(cc$cell_lines, nrow(tahoe_cell_line()))
 })
 

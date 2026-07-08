@@ -60,6 +60,7 @@ overview_server <- function(id) {
       # since the annotation tables cannot report them accurately.
       source_note <- switch(
         cc$obs_source,
+        grid = "Cells and cell lines from your local cell-count grid.",
         local = "Cells and cell lines from your local obs file.",
         remote = paste(
           "Cells and cell lines computed from the remote obs file",
