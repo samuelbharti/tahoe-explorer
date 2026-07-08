@@ -238,16 +238,7 @@ drug_explorer_server <- function(id) {
           }
         )
       }
-      reactable::reactable(
-        df,
-        columns = col_defs,
-        searchable = TRUE,
-        striped = TRUE,
-        highlight = TRUE,
-        compact = TRUE,
-        defaultPageSize = 10,
-        showPageSizeOptions = TRUE
-      )
+      tahoe_reactable(df, columns = col_defs)
     })
 
     output$moa_broad_plot <- plotly::renderPlotly({

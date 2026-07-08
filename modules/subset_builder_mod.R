@@ -350,15 +350,7 @@ subset_builder_server <- function(id) {
     })
 
     output$preview <- reactable::renderReactable({
-      reactable::reactable(
-        matched_samples(),
-        searchable = TRUE,
-        striped = TRUE,
-        highlight = TRUE,
-        compact = TRUE,
-        defaultPageSize = 8,
-        showPageSizeOptions = TRUE
-      )
+      tahoe_reactable(matched_samples(), page_size = 8)
     })
 
     # Copy-paste recipe reproducing the selection on obs_metadata.parquet. The
