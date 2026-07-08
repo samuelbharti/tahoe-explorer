@@ -1,9 +1,32 @@
 # Overview module.
 #
-# Landing tab: headline dataset counts as value boxes, plus an interactive
-# "cell lines by organ" chart linked to a cell-line metadata table — click an
-# organ bar to drill the table down to that organ. Reads only the small
-# metadata tables, so it is fast.
+# Landing tab: headline dataset counts as value boxes, plus an interactive,
+# color-coded "cell lines by organ" chart linked to a cell-line metadata table.
+# Click an organ bar to filter the table (and dim the other organs); click a
+# table row to break that cell line's drivers down into two plots below. Reads
+# only the small metadata tables, so it is fast.
+
+# A small, unobtrusive info affordance: an info icon in a card header that
+# reveals a short explanation on click (context without blocking the workflow).
+.info_pop <- function(msg, title = NULL) {
+  bslib::popover(
+    shiny::icon(
+      "circle-info",
+      class = "text-muted ms-2",
+      style = "cursor: pointer;"
+    ),
+    msg,
+    title = title,
+    placement = "auto"
+  )
+}
+
+# Oncogene vs tumor-suppressor get fixed, meaningful colors (red / blue).
+.gene_type_colors <- c(
+  Oncogene = "#E34948",
+  Suppressor = "#2A78D6",
+  Unknown = "#5F6B7A"
+)
 
 overview_ui <- function(id) {
   ns <- NS(id)
@@ -12,28 +35,97 @@ overview_ui <- function(id) {
     bslib::layout_columns(
       col_widths = c(5, 7),
       bslib::card(
-        bslib::card_header("Cell lines by organ"),
-        plotly::plotlyOutput(ns("organ_plot"), height = 380),
+        height = 460,
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Cell lines by organ"),
+          .info_pop(
+            paste(
+              "Each bar counts the assayed cell lines from one organ system",
+              "(the tissue the line was derived from). Colors identify organs",
+              "and match the table. Click a bar to filter the table to that",
+              "organ; click it again to clear."
+            ),
+            title = "Cell lines by organ"
+          )
+        ),
+        plotly::plotlyOutput(ns("organ_plot"), height = 360),
         bslib::card_footer(
           class = "text-muted small",
-          "Click an organ bar to filter the table."
+          "Click a bar to filter · click it again to clear."
         )
       ),
       bslib::card(
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
-          uiOutput(ns("table_title"), inline = TRUE),
+          div(
+            class = "d-flex align-items-center",
+            uiOutput(ns("table_title"), inline = TRUE),
+            .info_pop(
+              paste(
+                "The 50 cell lines assayed in Tahoe-100M, with their oncogenic",
+                "driver mutations. Click a row to break that line's drivers",
+                "down below. DepMap links open the external cell-line portal."
+              ),
+              title = "Cell lines"
+            )
+          ),
           uiOutput(ns("clear_filter"), inline = TRUE)
         ),
-        reactable::reactableOutput(ns("cell_line_table"))
+        reactable::reactableOutput(ns("cell_line_table")),
+        bslib::card_footer(
+          class = "text-muted small",
+          "Click a row to see its driver profile below."
+        )
+      )
+    ),
+    bslib::layout_columns(
+      col_widths = c(6, 6),
+      bslib::card(
+        height = 360,
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Driver genes"),
+          .info_pop(
+            paste(
+              "Oncogenic driver genes annotated for the selected cell line,",
+              "colored by role: oncogene (activating) vs tumor suppressor",
+              "(loss-of-function)."
+            ),
+            title = "Driver genes"
+          )
+        ),
+        plotly::plotlyOutput(ns("driver_gene_plot"), height = 260)
+      ),
+      bslib::card(
+        height = 360,
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Variant classes"),
+          .info_pop(
+            paste(
+              "How the selected cell line's driver mutations break down by",
+              "variant class — missense, deletion, frameshift, and so on."
+            ),
+            title = "Variant classes"
+          )
+        ),
+        plotly::plotlyOutput(ns("variant_plot"), height = 260)
       )
     )
   )
 }
 
-# Horizontal bar chart of cell-line counts per organ. `key = label` makes each
-# bar carry its organ name so plotly click events can report which was clicked.
-.overview_organ_bar <- function(df, top_n = 15) {
+# Stable organ -> color map, assigned in descending frequency order so the most
+# common organs get the leading (most distinct) palette hues.
+.overview_organ_colors <- function(organs) {
+  ord <- names(sort(table(organs), decreasing = TRUE))
+  stats::setNames(tahoe_pal(length(ord)), ord)
+}
+
+# Color-coded organ bar chart. `key = label` carries the organ name for click
+# events; `selected` dims every other organ so the picked one stands out.
+.overview_organ_bar <- function(df, colors, selected = NULL, top_n = 15) {
   validate(need("Organ" %in% names(df), "Organ column not available"))
   counts <- sort(table(df[["Organ"]]), decreasing = TRUE)
   counts <- utils::head(counts, top_n)
@@ -41,14 +133,91 @@ overview_ui <- function(id) {
     label = factor(names(counts), levels = rev(names(counts))),
     n = as.integer(counts)
   )
+  plot_df$sel <- if (is.null(selected)) {
+    TRUE
+  } else {
+    as.character(plot_df$label) == selected
+  }
+  plot_df$text <- paste0(plot_df$label, ": ", plot_df$n, " cell lines")
   ggplot2::ggplot(
     plot_df,
-    ggplot2::aes(x = label, y = n, key = label)
+    ggplot2::aes(
+      x = label,
+      y = n,
+      fill = label,
+      alpha = sel,
+      key = label,
+      text = text
+    )
   ) +
-    ggplot2::geom_col(fill = tahoe_colors$primary, width = 0.72) +
+    ggplot2::geom_col(width = 0.72) +
     ggplot2::coord_flip() +
+    ggplot2::scale_fill_manual(values = colors, guide = "none") +
+    ggplot2::scale_alpha_manual(
+      values = c(`TRUE` = 1, `FALSE` = 0.22),
+      guide = "none"
+    ) +
     ggplot2::scale_y_continuous(expand = ggplot2::expansion(c(0, 0.12))) +
     ggplot2::labs(x = NULL, y = "Cell lines") +
+    tahoe_theme()
+}
+
+# Driver genes of one cell line, one bar per gene, colored by gene role.
+.overview_driver_gene_bar <- function(rows) {
+  rows <- rows[!is.na(rows$Driver_Gene_Symbol), , drop = FALSE]
+  validate(need(nrow(rows) > 0, "No driver genes annotated for this line."))
+  rows$role <- ifelse(
+    is.na(rows$Driver_GeneType_DM),
+    "Unknown",
+    rows$Driver_GeneType_DM
+  )
+  genes <- unique(rows$Driver_Gene_Symbol)
+  rows$gene <- factor(rows$Driver_Gene_Symbol, levels = rev(genes))
+  rows$text <- paste0(
+    rows$Driver_Gene_Symbol,
+    " · ",
+    rows$Driver_VarType,
+    " · ",
+    rows$role
+  )
+  ggplot2::ggplot(
+    rows,
+    ggplot2::aes(x = gene, y = 1, fill = role, text = text)
+  ) +
+    ggplot2::geom_col(width = 0.7) +
+    ggplot2::coord_flip() +
+    ggplot2::scale_fill_manual(values = .gene_type_colors, name = NULL) +
+    ggplot2::labs(x = NULL, y = NULL) +
+    tahoe_theme() +
+    ggplot2::theme(
+      axis.text.x = ggplot2::element_blank(),
+      panel.grid = ggplot2::element_blank(),
+      legend.position = "bottom"
+    )
+}
+
+# Variant-class breakdown of one cell line's drivers, using a stable class color.
+.overview_variant_bar <- function(rows, colors) {
+  rows <- rows[!is.na(rows$Driver_VarType), , drop = FALSE]
+  validate(need(nrow(rows) > 0, "No variant classes annotated for this line."))
+  counts <- sort(table(rows$Driver_VarType), decreasing = TRUE)
+  plot_df <- data.frame(
+    label = factor(names(counts), levels = rev(names(counts))),
+    n = as.integer(counts)
+  )
+  plot_df$text <- paste0(plot_df$label, ": ", plot_df$n)
+  ggplot2::ggplot(
+    plot_df,
+    ggplot2::aes(x = label, y = n, fill = label, text = text)
+  ) +
+    ggplot2::geom_col(width = 0.72) +
+    ggplot2::coord_flip() +
+    ggplot2::scale_fill_manual(values = colors, guide = "none") +
+    ggplot2::scale_y_continuous(
+      breaks = scales::breaks_pretty(),
+      expand = ggplot2::expansion(c(0, 0.12))
+    ) +
+    ggplot2::labs(x = NULL, y = "Drivers") +
     tahoe_theme()
 }
 
@@ -74,6 +243,13 @@ overview_server <- function(id) {
       cl
     })
     selected_organ <- reactiveVal(NULL)
+
+    # Stable color maps shared by the chart and table.
+    organ_colors <- reactive(.overview_organ_colors(lines()$Organ))
+    variant_colors <- reactive({
+      classes <- sort(unique(stats::na.omit(tahoe_cell_line()$Driver_VarType)))
+      stats::setNames(tahoe_pal(length(classes)), classes)
+    })
 
     counts <- reactive(tahoe_summary_counts())
 
@@ -123,8 +299,8 @@ overview_server <- function(id) {
 
     output$organ_plot <- plotly::renderPlotly({
       tahoe_plotly(
-        .overview_organ_bar(lines()),
-        tooltip = c("y"),
+        .overview_organ_bar(lines(), organ_colors(), selected_organ()),
+        tooltip = "text",
         source = organ_src
       )
     })
@@ -183,20 +359,32 @@ overview_server <- function(id) {
     output$cell_line_table <- reactable::renderReactable({
       df <- filtered_lines()
       validate(need(nrow(df) > 0, "No cell lines for this organ."))
+      oc <- organ_colors()
 
       col_defs <- list(
-        cell_name = reactable::colDef(name = "Cell line", minWidth = 90),
-        Organ = reactable::colDef(name = "Organ", minWidth = 80),
-        Driver_Gene_Symbol = reactable::colDef(
-          name = "Driver gene",
-          minWidth = 90
+        Organ = reactable::colDef(
+          html = TRUE,
+          cell = function(value) {
+            color <- oc[[value]]
+            if (is.null(color)) {
+              color <- tahoe_colors$slate
+            }
+            sprintf(
+              paste0(
+                '<span style="display:inline-flex;align-items:center;',
+                'gap:6px;"><span style="width:.6rem;height:.6rem;',
+                'border-radius:50%%;background:%s;flex:none;"></span>%s</span>'
+              ),
+              color,
+              value
+            )
+          }
         ),
-        drivers = reactable::colDef(name = "Drivers", minWidth = 140)
+        drivers = reactable::colDef(minWidth = 150)
       )
       if ("Cell_ID_DepMap" %in% names(df)) {
         col_defs[["Cell_ID_DepMap"]] <- reactable::colDef(
           name = "DepMap",
-          minWidth = 90,
           html = TRUE,
           cell = function(value) {
             if (is.na(value) || !nzchar(as.character(value))) {
@@ -212,7 +400,52 @@ overview_server <- function(id) {
         )
       }
 
-      tahoe_reactable(df, columns = col_defs)
+      tahoe_reactable(
+        df,
+        columns = col_defs,
+        selection = "single",
+        onClick = "select"
+      )
+    })
+
+    # The cell line clicked in the table (maps the selected row to its name).
+    selected_cell <- reactive({
+      idx <- reactable::getReactableState("cell_line_table", "selected")
+      fl <- filtered_lines()
+      if (is.null(idx) || length(idx) == 0 || idx > nrow(fl)) {
+        return(NULL)
+      }
+      fl$cell_name[[idx]]
+    })
+
+    driver_rows <- reactive({
+      cn <- selected_cell()
+      if (is.null(cn)) {
+        return(NULL)
+      }
+      cl <- tahoe_cell_line()
+      cl[!is.na(cl$cell_name) & cl$cell_name == cn, , drop = FALSE]
+    })
+
+    output$driver_gene_plot <- plotly::renderPlotly({
+      rows <- driver_rows()
+      validate(need(
+        !is.null(rows),
+        "Click a cell line in the table to see its driver genes."
+      ))
+      tahoe_plotly(.overview_driver_gene_bar(rows), tooltip = "text")
+    })
+
+    output$variant_plot <- plotly::renderPlotly({
+      rows <- driver_rows()
+      validate(need(
+        !is.null(rows),
+        "Click a cell line to see its variant classes."
+      ))
+      tahoe_plotly(
+        .overview_variant_bar(rows, variant_colors()),
+        tooltip = "text"
+      )
     })
   })
 }

@@ -37,7 +37,7 @@ jobs:
             any::stringr
             any::ggplot2
             any::scales
-            any::DT
+            any::janitor
             any::reactable
             any::plotly
             any::duckdb
@@ -76,7 +76,7 @@ jobs:
             any::stringr
             any::ggplot2
             any::scales
-            any::DT
+            any::janitor
             any::reactable
             any::plotly
             any::duckdb

@@ -139,10 +139,28 @@ tahoe_reactable_theme <- function() {
 
 #' A reactable with the app's shared, UI-friendly defaults: searchable,
 #' sortable, compact, row highlight, paginated, tabular figures, Alpine theme.
-#' Pass through any extra reactable() arguments (e.g. `columns`, `onClick`).
-tahoe_reactable <- function(data, ..., page_size = 10) {
+#' Column headers are normalized to Title Case with janitor::clean_names() so
+#' every table reads consistently; pass `columns` colDefs to override specific
+#' ones (an explicit `name` wins, otherwise the Title Case label is injected).
+#' Extra reactable() arguments (e.g. `selection`, `onClick`) pass through `...`.
+tahoe_reactable <- function(data, columns = list(), ..., page_size = 10) {
+  labels <- janitor::make_clean_names(names(data), case = "title")
+  names(labels) <- names(data)
+  col_defs <- list()
+  for (nm in names(data)) {
+    override <- columns[[nm]]
+    if (is.null(override)) {
+      col_defs[[nm]] <- reactable::colDef(name = labels[[nm]])
+    } else {
+      if (is.null(override$name)) {
+        override$name <- labels[[nm]]
+      }
+      col_defs[[nm]] <- override
+    }
+  }
   reactable::reactable(
     data,
+    columns = col_defs,
     searchable = TRUE,
     sortable = TRUE,
     striped = TRUE,
