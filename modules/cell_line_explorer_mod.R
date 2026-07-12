@@ -91,6 +91,28 @@ cell_line_explorer_ui <- function(id) {
     bslib::card(
       bslib::card_header("Variant-type breakdown"),
       plotly::plotlyOutput(ns("var_type_plot"), height = 300)
+    ),
+    bslib::card(
+      full_screen = TRUE,
+      bslib::card_header(
+        class = "d-flex justify-content-between align-items-center",
+        span("Somatic variants"),
+        .info_pop(
+          paste(
+            "Somatic mutation calls for the matching cell lines. Full somatic",
+            "profiles from DepMap 24Q4 (CC BY 4.0) where available, with curated",
+            "driver variants from Cellosaurus for lines DepMap does not cover.",
+            "One row per variant; the source column shows the origin. Empty",
+            "until dev/download_variants.R is run; the demo uses synthetic data."
+          ),
+          title = "Somatic variants"
+        )
+      ),
+      reactable::reactableOutput(ns("variants"))
+    ),
+    bslib::card(
+      bslib::card_header("Most frequently mutated genes"),
+      plotly::plotlyOutput(ns("mutated_genes_plot"), height = 300)
     )
   )
 }
@@ -165,6 +187,59 @@ cell_line_explorer_server <- function(id) {
       }
 
       tahoe_reactable(df, columns = col_defs)
+    })
+
+    # Somatic variants for the matching lines: an inner join of the external
+    # variant table onto the filtered cell lines by cell name (every line has
+    # one, so DepMap- and Cellosaurus-sourced rows both attach). Empty (not an
+    # error) when the variant table is absent or nothing matches.
+    variants <- reactive({
+      v <- tryCatch(tahoe_cell_variants(), error = function(e) NULL)
+      lines <- filtered_lines()
+      if (
+        is.null(v) ||
+          nrow(v) == 0 ||
+          !"cell_name" %in% names(v) ||
+          !"cell_name" %in% names(lines)
+      ) {
+        return(dplyr::tibble(cell_name = character(), gene = character()))
+      }
+      keep <- intersect(c("cell_name", "Organ"), names(lines))
+      dplyr::inner_join(lines[, keep, drop = FALSE], v, by = "cell_name")
+    })
+
+    output$variants <- reactable::renderReactable({
+      v <- variants()
+      validate(need(
+        nrow(v) > 0,
+        paste(
+          "No somatic variants for the matching cell lines.",
+          "Run dev/download_variants.R to load DepMap / Cellosaurus variants",
+          "(the offline demo shows synthetic variants)."
+        )
+      ))
+      pref <- c(
+        "cell_name",
+        "source",
+        "gene",
+        "protein_change",
+        "variant_type",
+        "consequence",
+        "zygosity",
+        "hotspot",
+        "likely_lof",
+        "dbsnp"
+      )
+      tahoe_reactable(v[, intersect(pref, names(v)), drop = FALSE])
+    })
+
+    output$mutated_genes_plot <- plotly::renderPlotly({
+      v <- variants()
+      validate(need(
+        nrow(v) > 0 && "gene" %in% names(v),
+        "No variant data to plot."
+      ))
+      tahoe_plotly(.cell_line_bar(v, "gene", tahoe_colors$orange))
     })
 
     output$organ_plot <- plotly::renderPlotly({

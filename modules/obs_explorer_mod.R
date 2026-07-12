@@ -16,7 +16,7 @@
   "Cell line" = "cell_line",
   "Plate" = "plate",
   "Cell-cycle phase" = "phase",
-  "Passes QC filter" = "pass_filter"
+  "QC filter tier" = "pass_filter"
 )
 
 # Metric choices exposed in the obs section.

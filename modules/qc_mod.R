@@ -12,14 +12,25 @@ qc_ui <- function(id) {
     bslib::card(
       bslib::card_body(
         class = "py-2",
-        sliderInput(
-          ns("min_cells"),
-          "Minimum cells per condition (drug × cell line × dose) to consider well-powered",
-          min = 0,
-          max = 1000,
-          value = 100,
-          step = 50,
-          width = "100%"
+        bslib::layout_columns(
+          col_widths = c(8, 4),
+          sliderInput(
+            ns("min_cells"),
+            "Minimum cells per condition (drug × cell line × dose) to consider well-powered",
+            min = 0,
+            max = 1000,
+            value = 100,
+            step = 50,
+            width = "100%"
+          ),
+          div(
+            class = "d-flex align-items-end h-100 pb-2",
+            checkboxInput(
+              ns("qc_only"),
+              "Count only QC-passing cells (pass_filter = full)",
+              value = FALSE
+            )
+          )
         )
       )
     ),
@@ -94,8 +105,67 @@ qc_ui <- function(id) {
         uiOutput(ns("plate_note")),
         plotly::plotlyOutput(ns("plate_plot"), height = "22vh")
       )
+    ),
+    bslib::card(
+      height = "42vh",
+      bslib::card_header(
+        class = "d-flex justify-content-between align-items-center",
+        span("Cell-cycle phase composition"),
+        .info_pop(
+          paste(
+            "Share of profiled cells in each cell-cycle phase (G1 / S / G2M),",
+            "by organ. A tissue or drug skewed toward S/G2M (cycling) vs G1",
+            "(arrested) is a phenotype worth accounting for before",
+            "differential-expression analysis. From the cell grid's phase",
+            "counts."
+          ),
+          title = "Cell-cycle composition"
+        )
+      ),
+      plotly::plotlyOutput(ns("phase_plot"), height = "32vh")
     )
   )
+}
+
+# Stacked proportion bar of cell-cycle phase (G1/S/G2M) per organ.
+.qc_phase_bar <- function(df) {
+  validate(need(
+    nrow(df) > 0,
+    "Cell-cycle phase data is not available in this grid."
+  ))
+  long <- dplyr::tibble(
+    organ = rep(df$organ, 3),
+    phase = rep(c("G1", "S", "G2M"), each = nrow(df)),
+    n = c(df$G1, df$S, df$G2M)
+  )
+  long$phase <- factor(long$phase, levels = c("G1", "S", "G2M"))
+  totals <- tapply(long$n, long$organ, sum)
+  long$organ <- factor(long$organ, levels = names(sort(totals)))
+  long$text <- paste0(
+    long$organ,
+    " — ",
+    long$phase,
+    ": ",
+    format(long$n, big.mark = ","),
+    " cells"
+  )
+  ggplot2::ggplot(
+    long,
+    ggplot2::aes(x = organ, y = n, fill = phase, text = text)
+  ) +
+    ggplot2::geom_col(position = "fill", width = 0.8) +
+    ggplot2::scale_y_continuous(labels = scales::label_percent()) +
+    ggplot2::scale_fill_manual(
+      values = c(
+        G1 = tahoe_colors$blue,
+        S = tahoe_colors$primary,
+        G2M = tahoe_colors$green
+      ),
+      name = NULL
+    ) +
+    ggplot2::coord_flip() +
+    ggplot2::labs(x = NULL, y = "Share of cells") +
+    tahoe_theme()
 }
 
 # Bar of DMSO control cells per cell line (ascending, so the weakest are first).
@@ -145,10 +215,21 @@ qc_server <- function(id) {
       cond[cond$conc > 0, , drop = FALSE]
     })
 
+    # Which cell count defines "power": all cells, or only QC-passing (full)
+    # cells when the toggle is on and the grid carries the QC-tier column.
+    power_col <- reactive({
+      if (isTRUE(input$qc_only) && "n_full" %in% names(conditions())) {
+        "n_full"
+      } else {
+        "n_cells"
+      }
+    })
+
     underpowered <- reactive({
       thr <- input$min_cells %||% 100
       tr <- treatments()
-      tr[tr$n_cells < thr, , drop = FALSE]
+      pc <- power_col()
+      tr[tr[[pc]] < thr, , drop = FALSE]
     })
 
     incomplete <- reactive({
@@ -176,6 +257,29 @@ qc_server <- function(id) {
       )
     })
 
+    # Cell-cycle phase counts per organ, from the grid's phase columns (present
+    # only when the grid is the extended build). Empty otherwise -> the plot
+    # shows an explanatory message rather than erroring.
+    phase_by_organ <- reactive({
+      g <- tahoe_cell_grid()
+      if (!all(c("n_g1", "n_s", "n_g2m", "organ") %in% names(g))) {
+        return(dplyr::tibble(
+          organ = character(),
+          G1 = numeric(),
+          S = numeric(),
+          G2M = numeric()
+        ))
+      }
+      d <- g[!is.na(g$organ), , drop = FALSE]
+      dplyr::summarise(
+        dplyr::group_by(d, organ),
+        G1 = sum(n_g1),
+        S = sum(n_s),
+        G2M = sum(n_g2m),
+        .groups = "drop"
+      )
+    })
+
     output$value_boxes <- renderUI({
       thr <- input$min_cells %||% 100
       n_under <- nrow(underpowered())
@@ -184,15 +288,25 @@ qc_server <- function(id) {
       n_incomplete <- nrow(incomplete())
       ctrl <- control_by_line()
       min_ctrl <- if (nrow(ctrl) > 0) min(ctrl$n_cells) else NA_real_
+      cond <- conditions()
+      qc_rate <- if ("n_full" %in% names(cond) && sum(cond$n_cells) > 0) {
+        sum(cond$n_full) / sum(cond$n_cells)
+      } else {
+        NA_real_
+      }
+      cell_word <- if (identical(power_col(), "n_full")) {
+        "QC-passing cells"
+      } else {
+        "cells"
+      }
       fmt <- function(x) {
         if (is.na(x)) "—" else format(x, big.mark = ",")
       }
-      bslib::layout_columns(
-        fill = FALSE,
+      boxes <- list(
         bslib::value_box(
           "Underpowered conditions",
           fmt(n_under),
-          paste0(pct, "% of treatments < ", fmt(thr), " cells"),
+          paste0(pct, "% of treatments < ", fmt(thr), " ", cell_word),
           theme = if (pct > 25) "warning" else "primary",
           height = "120px"
         ),
@@ -211,6 +325,19 @@ qc_server <- function(id) {
           height = "120px"
         )
       )
+      if (!is.na(qc_rate)) {
+        boxes <- c(
+          boxes,
+          list(bslib::value_box(
+            "QC pass rate",
+            paste0(round(100 * qc_rate), "%"),
+            "cells passing the full QC filter",
+            theme = "secondary",
+            height = "120px"
+          ))
+        )
+      }
+      do.call(bslib::layout_columns, c(list(fill = FALSE), boxes))
     })
 
     output$under_table <- reactable::renderReactable({
@@ -219,14 +346,24 @@ qc_server <- function(id) {
         nrow(df) > 0,
         "No underpowered conditions at this threshold."
       ))
-      df <- df[
-        order(df$n_cells),
-        c("drug", "cell_name", "organ", "conc", "n_cells")
-      ]
+      has_full <- "n_full" %in% names(df)
+      cols <- c(
+        "drug",
+        "cell_name",
+        "organ",
+        "conc",
+        if (has_full) "n_full",
+        "n_cells"
+      )
+      df <- df[order(df[[power_col()]]), cols]
       df$conc <- paste0(df$conc, " µM")
+      coldefs <- list(conc = reactable::colDef(name = "Dose"))
+      if (has_full) {
+        coldefs$n_full <- reactable::colDef(name = "QC-pass cells")
+      }
       tahoe_reactable(
         df,
-        columns = list(conc = reactable::colDef(name = "Dose")),
+        columns = coldefs,
         pagination = FALSE,
         height = "34vh"
       )
@@ -288,6 +425,10 @@ qc_server <- function(id) {
 
     output$plate_plot <- plotly::renderPlotly({
       tahoe_plotly(.qc_plate_bar(plates_per_drug()), tooltip = "text")
+    })
+
+    output$phase_plot <- plotly::renderPlotly({
+      tahoe_plotly(.qc_phase_bar(phase_by_organ()), tooltip = "text")
     })
   })
 }

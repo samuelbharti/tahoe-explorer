@@ -129,6 +129,13 @@ tahoe_cell_line <- function() tahoe_table("cell_line_metadata")
 tahoe_sample <- function() tahoe_table("sample_metadata")
 tahoe_gene <- function() tahoe_table("gene_metadata")
 
+#' Per cell-line somatic variant calls (one row per variant) from external
+#' sources -- DepMap full somatic profiles plus a Cellosaurus curated-driver
+#' fallback -- carrying a `source` column and keyed on `cell_name`. Resolves
+#' data/cell_line_variants.parquet if present, else the synthetic fixture, so it
+#' stays offline-safe and metadata-only. Absent until dev/download_variants.R runs.
+tahoe_cell_variants <- function() tahoe_table("cell_line_variants")
+
 #' Parse the `drugname_drugconc` string, e.g. "[('Drug', 5.0, 'uM')]", into a
 #' tibble of (conc, unit). Returns NA for values it cannot parse.
 tahoe_parse_dose <- function(x) {
@@ -409,6 +416,38 @@ tahoe_summary_counts <- function() {
   )
 }
 
+# SQL for the per (drug x cell line x plate x dose) grid. `extended` adds the
+# QC-tier (pass_filter = 'full'), cell-cycle-phase, and QC-metric-sum aggregates
+# the QC/Coverage views use; the minimal form (cell counts only) is the fallback
+# for an obs table that lacks those columns. Kept identical to the query in
+# dev/build_grid.R so a prebuilt grid and an on-the-fly grid match exactly.
+.tahoe_grid_query <- function(src_quoted, extended = TRUE) {
+  base_sel <- paste0(
+    "SELECT drug, cell_name, plate, TRY_CAST(regexp_extract(",
+    "drugname_drugconc, ',\\s*([0-9.eE+-]+)\\s*,', 1) AS DOUBLE) AS conc, ",
+    "count(*) AS n_cells"
+  )
+  ext_sel <- if (extended) {
+    paste0(
+      ", count(*) FILTER (WHERE pass_filter = 'full') AS n_full",
+      ", count(*) FILTER (WHERE phase = 'G1') AS n_g1",
+      ", count(*) FILTER (WHERE phase = 'S') AS n_s",
+      ", count(*) FILTER (WHERE phase = 'G2M') AS n_g2m",
+      ", sum(pcnt_mito) AS sum_pcnt_mito",
+      ", sum(gene_count) AS sum_gene_count",
+      ", sum(tscp_count) AS sum_tscp_count"
+    )
+  } else {
+    ""
+  }
+  sprintf(
+    "%s%s FROM read_parquet(%s) GROUP BY 1, 2, 3, 4",
+    base_sel,
+    ext_sel,
+    src_quoted
+  )
+}
+
 #' Per (drug x cell line x plate x dose) cell-count grid, cached. This small
 #' aggregate (~66k rows for the real data) is derived once from the obs data so
 #' the subset builder can compute live, accurate cell counts locally without
@@ -431,18 +470,24 @@ tahoe_cell_grid <- function() {
         if (identical(source$type, "remote")) {
           .tahoe_load_httpfs()
         }
-        dplyr::as_tibble(DBI::dbGetQuery(
-          tahoe_con(),
-          sprintf(
-            paste0(
-              "SELECT drug, cell_name, plate, TRY_CAST(regexp_extract(",
-              "drugname_drugconc, ',\\s*([0-9.eE+-]+)\\s*,', 1) AS DOUBLE) ",
-              "AS conc, count(*) AS n_cells FROM read_parquet(%s) ",
-              "GROUP BY 1, 2, 3, 4"
-            ),
-            .tahoe_quote(source$src)
-          )
-        ))
+        src_q <- .tahoe_quote(source$src)
+        # Prefer the extended grid; fall back to counts-only if the obs table
+        # lacks the QC/phase columns, so the grid is never empty on schema drift.
+        ext <- tryCatch(
+          dplyr::as_tibble(DBI::dbGetQuery(
+            tahoe_con(),
+            .tahoe_grid_query(src_q, extended = TRUE)
+          )),
+          error = function(e) NULL
+        )
+        if (is.null(ext)) {
+          dplyr::as_tibble(DBI::dbGetQuery(
+            tahoe_con(),
+            .tahoe_grid_query(src_q, extended = FALSE)
+          ))
+        } else {
+          ext
+        }
       }
     },
     error = function(e) NULL
@@ -467,6 +512,40 @@ tahoe_cell_grid <- function() {
   base
 }
 
+# The extended per-condition columns a full grid carries beyond the cell counts.
+.tahoe_grid_extra_cols <- c(
+  "n_full",
+  "n_g1",
+  "n_s",
+  "n_g2m",
+  "sum_pcnt_mito",
+  "sum_gene_count",
+  "sum_tscp_count"
+)
+
+# If the grid carries the extended QC/phase columns, summarise them to the given
+# grain -- QC-passing cell count, cell-cycle phase counts, and cell-weighted mean
+# QC metrics -- and left-join onto `summary_df`. Returns `summary_df` unchanged
+# when the columns are absent (a counts-only grid), so callers that expect only
+# the base columns keep working. `by_cols` is the grouping key of `summary_df`.
+.tahoe_join_grid_extras <- function(summary_df, g, by_cols) {
+  if (!all(.tahoe_grid_extra_cols %in% names(g))) {
+    return(summary_df)
+  }
+  extra <- dplyr::summarise(
+    dplyr::group_by(g, dplyr::across(dplyr::all_of(by_cols))),
+    n_full = sum(n_full),
+    n_g1 = sum(n_g1),
+    n_s = sum(n_s),
+    n_g2m = sum(n_g2m),
+    mean_pcnt_mito = sum(sum_pcnt_mito) / sum(n_cells),
+    mean_gene_count = sum(sum_gene_count) / sum(n_cells),
+    mean_tscp_count = sum(sum_tscp_count) / sum(n_cells),
+    .groups = "drop"
+  )
+  dplyr::left_join(summary_df, extra, by = by_cols)
+}
+
 #' Coverage summary derived from the cell grid: total cells per (drug x cell
 #' line), the set of non-zero doses tested, how many of the 3 doses are present,
 #' and the number of plates. Powers the coverage matrix and QC views. `DMSO_TF`
@@ -484,7 +563,7 @@ tahoe_coverage <- function() {
       n_plates = integer()
     ))
   }
-  dplyr::summarise(
+  cov <- dplyr::summarise(
     dplyr::group_by(g, drug, cell_name, organ),
     n_cells = sum(n_cells),
     n_doses = dplyr::n_distinct(conc[conc > 0]),
@@ -492,6 +571,7 @@ tahoe_coverage <- function() {
     n_plates = dplyr::n_distinct(plate),
     .groups = "drop"
   )
+  .tahoe_join_grid_extras(cov, g, c("drug", "cell_name"))
 }
 
 #' Analysis conditions from the cell grid: cells per (drug x cell line x dose),
@@ -510,10 +590,11 @@ tahoe_conditions <- function() {
       n_plates = integer()
     ))
   }
-  dplyr::summarise(
+  cond <- dplyr::summarise(
     dplyr::group_by(g, drug, cell_name, organ, conc),
     n_cells = sum(n_cells),
     n_plates = dplyr::n_distinct(plate),
     .groups = "drop"
   )
+  .tahoe_join_grid_extras(cond, g, c("drug", "cell_name", "conc"))
 }

@@ -267,7 +267,22 @@ about_ui <- function(id) {
           target = "_blank",
           rel = "noopener",
           "Preprint"
-        )
+        ),
+        " · ",
+        tags$a(
+          href = "https://depmap.org/portal/",
+          target = "_blank",
+          rel = "noopener",
+          "DepMap 24Q4"
+        ),
+        " · ",
+        tags$a(
+          href = "https://www.cellosaurus.org",
+          target = "_blank",
+          rel = "noopener",
+          "Cellosaurus"
+        ),
+        " (cell-line somatic variants, both CC BY 4.0)"
       )
     )
   )
