@@ -33,7 +33,7 @@ test_that("tahoe_obs_summary applies whitelisted filters", {
   unfiltered <- tahoe_obs_summary("phase", metric = "n_cells")
   filtered <- tahoe_obs_summary(
     "phase",
-    filters = list(pass_filter = "True"),
+    filters = list(pass_filter = "full"),
     metric = "n_cells"
   )
   expect_true(sum(filtered$value) <= sum(unfiltered$value))
@@ -90,10 +90,53 @@ test_that("tahoe_cell_grid aggregates obs and reconciles with the counts", {
   expect_equal(dplyr::n_distinct(grid$cell_name), cc$cell_lines)
 })
 
+test_that("the extended grid exposes QC-tier, phase, and QC-metric columns", {
+  grid <- tahoe_cell_grid()
+  ext <- c(
+    "n_full",
+    "n_g1",
+    "n_s",
+    "n_g2m",
+    "sum_pcnt_mito",
+    "sum_gene_count",
+    "sum_tscp_count"
+  )
+  skip_if(!all(ext %in% names(grid)), "counts-only grid (no extended columns)")
+
+  # QC-passing cells never exceed all cells; phase counts are non-negative and
+  # never exceed the total cells in a condition.
+  expect_true(all(grid$n_full <= grid$n_cells))
+  expect_true(all(grid$n_g1 >= 0 & grid$n_s >= 0 & grid$n_g2m >= 0))
+  expect_true(all(grid$n_g1 + grid$n_s + grid$n_g2m <= grid$n_cells))
+
+  # The coverage / conditions helpers propagate the extended aggregates and a
+  # cell-weighted mean QC metric, still bounded by the total cell counts.
+  cov <- tahoe_coverage()
+  expect_true(all(
+    c("n_full", "n_g1", "n_s", "n_g2m", "mean_pcnt_mito") %in% names(cov)
+  ))
+  expect_true(all(cov$n_full <= cov$n_cells))
+
+  cond <- tahoe_conditions()
+  expect_true(all(c("n_full", "mean_pcnt_mito") %in% names(cond)))
+  expect_true(all(cond$n_full <= cond$n_cells))
+})
+
 test_that("tahoe_cell_line_unique collapses to one row per cell line", {
   u <- tahoe_cell_line_unique()
   expect_equal(nrow(u), dplyr::n_distinct(tahoe_cell_line()$cell_name))
   expect_false(any(duplicated(u$cell_name)))
   expect_true(all(c("drivers", "n_drivers") %in% names(u)))
   expect_true(all(u$n_drivers >= 1))
+})
+
+test_that("tahoe_cell_variants loads and every variant joins to a cell line", {
+  v <- tahoe_cell_variants()
+  expect_s3_class(v, "tbl_df")
+  expect_true(all(c("cell_name", "source", "gene") %in% names(v)))
+  expect_gt(nrow(v), 0)
+  expect_identical(attr(v, "tahoe_source"), "fixture")
+  # Referential integrity: every variant's cell_name is a real cell line, so the
+  # join in the Cell Lines tab never drops or invents rows.
+  expect_true(all(v$cell_name %in% tahoe_cell_line()$cell_name))
 })

@@ -91,6 +91,31 @@ test_that("no rows match an impossible filter", {
   })
 })
 
+test_that("somatic variants join to the filtered cell lines by DepMap id", {
+  testServer(cell_line_explorer_server, {
+    session$setInputs(
+      organ = character(),
+      gene = character(),
+      var_type = character(),
+      cell_name = ""
+    )
+    v <- variants()
+    skip_if(nrow(v) == 0, "no variant fixture present")
+
+    # Every variant row belongs to a currently matching cell line.
+    expect_true(all(c("cell_name", "gene", "source") %in% names(v)))
+    expect_true(all(v$cell_name %in% filtered_lines()$cell_name))
+
+    # An organ filter narrows the variant set to that organ's lines.
+    full <- tahoe_cell_line()
+    skip_if_not("Organ" %in% names(full))
+    session$setInputs(organ = full$Organ[[1]])
+    v2 <- variants()
+    expect_true(all(v2$cell_name %in% filtered_lines()$cell_name))
+    expect_lte(nrow(v2), nrow(v))
+  })
+})
+
 test_that("the table/export view has one row per distinct cell line", {
   testServer(cell_line_explorer_server, {
     session$setInputs(

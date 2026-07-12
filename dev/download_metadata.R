@@ -130,8 +130,16 @@ if (requireNamespace("duckdb", quietly = TRUE)) {
           paste0(
             "COPY (SELECT drug, cell_name, plate, TRY_CAST(regexp_extract(",
             "drugname_drugconc, ',\\s*([0-9.eE+-]+)\\s*,', 1) AS DOUBLE) AS ",
-            "conc, count(*) AS n_cells FROM read_parquet('%s') GROUP BY ",
-            "1, 2, 3, 4) TO '%s' (FORMAT PARQUET)"
+            "conc, count(*) AS n_cells, ",
+            "count(*) FILTER (WHERE pass_filter = 'full') AS n_full, ",
+            "count(*) FILTER (WHERE phase = 'G1') AS n_g1, ",
+            "count(*) FILTER (WHERE phase = 'S') AS n_s, ",
+            "count(*) FILTER (WHERE phase = 'G2M') AS n_g2m, ",
+            "sum(pcnt_mito) AS sum_pcnt_mito, ",
+            "sum(gene_count) AS sum_gene_count, ",
+            "sum(tscp_count) AS sum_tscp_count ",
+            "FROM read_parquet('%s') GROUP BY 1, 2, 3, 4) TO '%s' ",
+            "(FORMAT PARQUET)"
           ),
           src,
           grid_dest

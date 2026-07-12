@@ -140,8 +140,10 @@ obs_metadata <- data.frame(
   S_score = round(rnorm(n_obs), 3),
   G2M_score = round(rnorm(n_obs), 3),
   phase = sample(phases, n_obs, replace = TRUE),
+  # QC tier, matching the real obs vocabulary: "full" = passed the full-
+  # stringency filter (high quality), "minimal" = passed only minimal QC.
   pass_filter = sample(
-    c("True", "False"),
+    c("full", "minimal"),
     n_obs,
     replace = TRUE,
     prob = c(0.9, 0.1)
@@ -186,6 +188,76 @@ cell_line_metadata <- do.call(
   })
 )
 
+# Synthetic somatic variants keyed on Cell_ID_DepMap, mirroring the shape of a
+# DepMap OmicsSomaticMutations export (one row per variant per cell line). Built
+# after cell_line_metadata so the earlier fixtures' RNG stream is unchanged.
+variant_genes <- c(driver_genes, "PTEN", "RB1", "APC", "CTNNB1")
+v_types <- c("SNV", "insertion", "deletion")
+consequences <- c(
+  "missense_variant",
+  "stop_gained",
+  "frameshift_variant",
+  "splice_region_variant",
+  "synonymous_variant"
+)
+zygosities <- c("Homozygous", "Heterozygous")
+aa <- strsplit("ACDEFGHIKLMNPQRSTVWY", "")[[1]]
+cell_variants <- do.call(
+  rbind,
+  lapply(seq_len(n_cell), function(i) {
+    k <- sample(2:8, 1)
+    pos <- sample(20:900, k, replace = TRUE)
+    # A few lines mimic the Cellosaurus curated-driver fallback (with zygosity,
+    # no hotspot/LoF/dbSNP flags); the rest mimic the DepMap full profile.
+    cello <- i %% 6 == 1
+    data.frame(
+      cell_name = cell_metadata$cell_name[i],
+      source = if (cello) "Cellosaurus" else "DepMap",
+      gene = sample(variant_genes, k, replace = TRUE),
+      protein_change = sprintf(
+        "p.%s%d%s",
+        sample(aa, k, replace = TRUE),
+        pos,
+        sample(aa, k, replace = TRUE)
+      ),
+      dna_change = sprintf(
+        "c.%d%s>%s",
+        pos * 3L,
+        sample(c("A", "C", "G", "T"), k, replace = TRUE),
+        sample(c("A", "C", "G", "T"), k, replace = TRUE)
+      ),
+      variant_type = if (cello) {
+        "Mutation"
+      } else {
+        sample(v_types, k, replace = TRUE)
+      },
+      consequence = if (cello) {
+        "Simple"
+      } else {
+        sample(consequences, k, replace = TRUE)
+      },
+      hotspot = if (cello) FALSE else runif(k) < 0.1,
+      likely_lof = if (cello) FALSE else runif(k) < 0.25,
+      dbsnp = if (cello) {
+        NA_character_
+      } else {
+        ifelse(
+          runif(k) < 0.5,
+          sprintf("rs%d", sample(1000:9999999, k, replace = TRUE)),
+          NA_character_
+        )
+      },
+      zygosity = if (cello) {
+        sample(zygosities, k, replace = TRUE)
+      } else {
+        NA_character_
+      },
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    )
+  })
+)
+
 con <- dbConnect(duckdb())
 on.exit(dbDisconnect(con, shutdown = TRUE), add = TRUE)
 
@@ -208,5 +280,6 @@ write_fixture(cell_line_metadata, "cell_line_metadata")
 write_fixture(sample_metadata, "sample_metadata")
 write_fixture(gene_metadata, "gene_metadata")
 write_fixture(obs_metadata, "obs_metadata")
+write_fixture(cell_variants, "cell_line_variants")
 
 cat("Synthetic fixtures written to", out_dir, "\n")
