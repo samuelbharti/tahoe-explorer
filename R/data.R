@@ -152,6 +152,52 @@ tahoe_gene <- function() tahoe_table("gene_metadata")
 #' stays offline-safe and metadata-only. Absent until dev/download_variants.R runs.
 tahoe_cell_variants <- function() tahoe_table("cell_line_variants")
 
+#' Target gene symbols for a single drug name, parsed from the drug table's
+#' comma/semicolon-separated `targets` column. character(0) if unknown.
+tahoe_drug_targets <- function(drug_name) {
+  if (length(drug_name) != 1 || is.na(drug_name) || !nzchar(drug_name)) {
+    return(character(0))
+  }
+  d <- tahoe_drug()
+  if (!all(c("drug", "targets") %in% names(d))) {
+    return(character(0))
+  }
+  row <- d[d$drug == drug_name, , drop = FALSE]
+  if (nrow(row) == 0) {
+    return(character(0))
+  }
+  parts <- trimws(unlist(strsplit(as.character(row$targets[[1]]), "[,;]")))
+  unique(parts[!is.na(parts) & nzchar(parts)])
+}
+
+#' Assayed cell lines carrying a somatic variant in any of `genes`. Joins the
+#' variant table to the lines actually present in the obs grid, so only
+#' experimentally-assayed lines are returned -- the set over which a
+#' mutant-vs-wildtype contrast could be designed. One row per matching (cell
+#' line, variant). Empty tibble when there is no variant data or no match.
+tahoe_target_mutations <- function(genes) {
+  genes <- unique(genes[!is.na(genes) & nzchar(genes)])
+  empty <- dplyr::tibble(
+    cell_name = character(),
+    gene = character(),
+    protein_change = character(),
+    source = character()
+  )
+  if (length(genes) == 0) {
+    return(empty)
+  }
+  v <- tryCatch(tahoe_cell_variants(), error = function(e) NULL)
+  if (
+    is.null(v) || nrow(v) == 0 || !all(c("cell_name", "gene") %in% names(v))
+  ) {
+    return(empty)
+  }
+  assayed <- unique(tahoe_cell_grid()$cell_name)
+  dplyr::as_tibble(
+    v[v$gene %in% genes & v$cell_name %in% assayed, , drop = FALSE]
+  )
+}
+
 #' Parse the `drugname_drugconc` string, e.g. "[('Drug', 5.0, 'uM')]", into a
 #' tibble of (conc, unit). Returns NA for values it cannot parse.
 tahoe_parse_dose <- function(x) {

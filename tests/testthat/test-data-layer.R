@@ -140,3 +140,27 @@ test_that("tahoe_cell_variants loads and every variant joins to a cell line", {
   # join in the Cell Lines tab never drops or invents rows.
   expect_true(all(v$cell_name %in% tahoe_cell_line()$cell_name))
 })
+
+test_that("drug-target x mutation cross-reference restricts to assayed lines", {
+  # Empty / unknown inputs are safe (no error, zero rows).
+  expect_equal(nrow(tahoe_target_mutations(character(0))), 0)
+  expect_equal(nrow(tahoe_target_mutations(NA_character_)), 0)
+  expect_equal(tahoe_drug_targets("___no_such_drug___"), character(0))
+
+  # tahoe_drug_targets parses the comma-separated targets column into atoms.
+  d <- tahoe_drug()
+  skip_if(!"targets" %in% names(d))
+  with_t <- d$drug[!is.na(d$targets) & nzchar(as.character(d$targets))]
+  skip_if(length(with_t) == 0)
+  expect_gte(length(tahoe_drug_targets(with_t[[1]])), 1)
+
+  # A hit set only ever contains assayed lines mutated in the queried gene.
+  genes <- tahoe_cell_variants()$gene
+  skip_if(length(genes) == 0)
+  gene <- names(sort(table(genes), decreasing = TRUE))[[1]]
+  hits <- tahoe_target_mutations(gene)
+  if (nrow(hits) > 0) {
+    expect_true(all(hits$gene == gene))
+    expect_true(all(hits$cell_name %in% unique(tahoe_cell_grid()$cell_name)))
+  }
+})
