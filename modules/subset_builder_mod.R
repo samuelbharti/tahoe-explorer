@@ -141,7 +141,7 @@ subset_builder_ui <- function(id) {
 
 # Public obs parquet on HuggingFace — the source the generated code reads from,
 # so the snippets run without pre-downloading anything.
-.subset_obs_hf <- "hf://datasets/vevotx/Tahoe-100M/metadata/obs_metadata.parquet"
+.subset_obs_hf <- "hf://datasets/tahoebio/Tahoe-100M/metadata/obs_metadata.parquet"
 
 # Approximate compressed bytes per cell in the obs parquet (~2.29 GB / 100.6M
 # cells), used for the subset size estimate.
@@ -171,17 +171,6 @@ subset_builder_ui <- function(id) {
     collapse = ", "
   )
   paste0("(", vals, ")")
-}
-
-# Render a character vector as a Python list literal, e.g. ["a", "b"].
-.subset_py_list <- function(x) {
-  esc <- gsub('"', '\\\\"', x, perl = TRUE)
-  paste0("[", paste(sprintf('"%s"', esc), collapse = ", "), "]")
-}
-
-# Render a numeric vector as a Python list literal, e.g. [0.05, 5].
-.subset_py_num <- function(x) {
-  paste0("[", paste(format(x, trim = TRUE), collapse = ", "), "]")
 }
 
 subset_builder_server <- function(id) {
@@ -416,12 +405,13 @@ subset_builder_server <- function(id) {
       }
 
       r_where <- character()
-      py_where <- character()
       if (length(drugs) > 0) {
-        r_where <- c(r_where, sprintf("drug IN %s", .subset_sql_vec(drugs)))
-        py_where <- c(
-          py_where,
-          sprintf('df["drug"].isin(%s)', .subset_py_list(drugs))
+        # Include the DMSO_TF vehicle control so the pulled subset has a
+        # control arm — perturbation DE is treated-vs-control.
+        drugs_ctrl <- unique(c(drugs, "DMSO_TF"))
+        r_where <- c(
+          r_where,
+          sprintf("drug IN %s", .subset_sql_vec(drugs_ctrl))
         )
       }
       if (constrain_lines) {
@@ -429,19 +419,13 @@ subset_builder_server <- function(id) {
           r_where,
           sprintf("cell_name IN %s", .subset_sql_vec(lines))
         )
-        py_where <- c(
-          py_where,
-          sprintf('df["cell_name"].isin(%s)', .subset_py_list(lines))
-        )
       }
       if (length(plates) > 0) {
         r_where <- c(r_where, sprintf("plate IN %s", .subset_sql_vec(plates)))
-        py_where <- c(
-          py_where,
-          sprintf('df["plate"].isin(%s)', .subset_py_list(plates))
-        )
       }
       if (length(doses) > 0) {
+        # Keep the DMSO vehicle (dose 0) alongside the chosen doses.
+        doses_ctrl <- sort(unique(c(doses, 0)))
         r_where <- c(
           r_where,
           sprintf(
@@ -449,23 +433,12 @@ subset_builder_server <- function(id) {
               "TRY_CAST(regexp_extract(drugname_drugconc, ",
               "',\\s*([0-9.eE+-]+)\\s*,', 1) AS DOUBLE) IN (%s)"
             ),
-            paste(format(doses, trim = TRUE), collapse = ", ")
-          )
-        )
-        py_where <- c(
-          py_where,
-          sprintf(
-            paste0(
-              'df["drugname_drugconc"].str.extract(',
-              'r",\\s*([0-9.eE+-]+)\\s*,")[0].astype(float).isin(%s)'
-            ),
-            .subset_py_num(doses)
+            paste(format(doses_ctrl, trim = TRUE), collapse = ", ")
           )
         )
       }
 
       r_predicate <- paste(r_where, collapse = "\n    AND ")
-      py_predicate <- paste(py_where, collapse = "\n    & ")
 
       est <- estimate()
       header <- paste(
@@ -477,6 +450,7 @@ subset_builder_server <- function(id) {
           .subset_fmt(est$obs_mb)
         ),
         "# The expression matrix is downloaded separately and is larger.",
+        "# DMSO_TF vehicle controls (dose 0) are included automatically.",
         sprintf("# Source: %s", .subset_obs_hf),
         sep = "\n"
       )
@@ -494,14 +468,20 @@ subset_builder_server <- function(id) {
         sep = "\n"
       )
       py_snippet <- paste(
-        "## Python (scanpy / AnnData) — subset cells for analysis ------",
-        "import pandas as pd, scanpy as sc",
-        sprintf('obs = pd.read_parquet(\n    "%s"\n)', .subset_obs_hf),
-        sprintf("mask = (\n    %s\n)", gsub("df\\[", "obs[", py_predicate)),
-        'cells = obs.loc[mask, "BARCODE_SUB_LIB_ID"]',
+        "## Python (duckdb) — pull the subset's cell-level metadata -----",
+        "import duckdb",
+        "con = duckdb.connect()",
+        'con.execute("INSTALL httpfs; LOAD httpfs;")',
+        'obs = con.execute("""',
+        "  SELECT *",
+        sprintf("  FROM read_parquet('%s')", .subset_obs_hf),
+        sprintf("  WHERE %s", r_predicate),
+        '""").df()',
+        'cells = obs["BARCODE_SUB_LIB_ID"]',
         "",
         "# Point `adata` at the Tahoe-100M expression AnnData, then keep",
         "# only these cells (obs_names are the BARCODE_SUB_LIB_ID values):",
+        "# import scanpy as sc",
         '# adata = sc.read_h5ad("<tahoe_expression.h5ad>", backed="r")',
         "# adata = adata[adata.obs_names.isin(cells)].to_memory()",
         sep = "\n"

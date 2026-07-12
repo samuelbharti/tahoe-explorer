@@ -25,9 +25,25 @@ subset_export_ui <- function(id, show_recipe = FALSE) {
       )
     ),
     if (show_recipe) {
+      recipe_id <- ns("recipe")
       tagList(
         tags$hr(),
-        tags$strong("Analysis recipe"),
+        div(
+          class = "d-flex align-items-center gap-2 mb-1",
+          tags$strong("Analysis recipe"),
+          tags$button(
+            type = "button",
+            class = "btn btn-sm btn-outline-secondary",
+            onclick = sprintf(
+              paste0(
+                "navigator.clipboard.writeText(",
+                "document.getElementById('%s').innerText)"
+              ),
+              recipe_id
+            ),
+            "Copy"
+          )
+        ),
         tags$p(
           class = "text-muted small",
           "Copy-paste code to reproduce this selection on the full dataset."
