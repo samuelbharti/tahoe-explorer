@@ -4,6 +4,12 @@
 
 test_that("app launches and renders the Overview tab", {
   testthat::skip_if_not_installed("shinytest2")
+  testthat::skip_if_not_installed("chromote")
+  chrome <- tryCatch(chromote::find_chrome(), error = function(e) NULL)
+  testthat::skip_if(
+    is.null(chrome) || !nzchar(chrome),
+    "No Chrome/Chromium available"
+  )
 
   app <- shinytest2::AppDriver$new(
     app_dir = test_path("..", ".."),
