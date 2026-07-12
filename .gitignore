@@ -22,6 +22,7 @@ dev/.Rhistory
 
 # Local working docs and tooling (not committed)
 docs/plans/
+docs/local/
 .claude/
 
 # Scratch / temp
