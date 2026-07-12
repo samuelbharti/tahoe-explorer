@@ -98,6 +98,27 @@ tahoe_table_path <- function(name) {
   )
 }
 
+# Apply optional duckdb resource caps for shared/hosted deployments, so one heavy
+# query cannot exhaust the host. No-ops unless the env vars are set, so local and
+# CI behaviour is unchanged. TAHOE_DUCKDB_MEMORY_LIMIT (e.g. "4GB"),
+# TAHOE_DUCKDB_THREADS (e.g. "2"). Best-effort (wrapped in try()).
+.tahoe_apply_limits <- function(con) {
+  mem <- Sys.getenv("TAHOE_DUCKDB_MEMORY_LIMIT", unset = "")
+  if (nzchar(mem)) {
+    try(
+      DBI::dbExecute(con, sprintf("SET memory_limit=%s", .tahoe_quote(mem))),
+      silent = TRUE
+    )
+  }
+  threads <- suppressWarnings(as.integer(
+    Sys.getenv("TAHOE_DUCKDB_THREADS", unset = "")
+  ))
+  if (!is.na(threads) && threads > 0) {
+    try(DBI::dbExecute(con, sprintf("SET threads=%d", threads)), silent = TRUE)
+  }
+  invisible(con)
+}
+
 #' Cached duckdb connection for the app's lifetime.
 tahoe_con <- function() {
   if (is.null(.tahoe_cache$con) || !DBI::dbIsValid(.tahoe_cache$con)) {
@@ -106,6 +127,7 @@ tahoe_con <- function() {
     # later remote query re-loads it instead of assuming the old connection's
     # state.
     .tahoe_cache$httpfs <- FALSE
+    .tahoe_apply_limits(.tahoe_cache$con)
   }
   .tahoe_cache$con
 }
@@ -209,17 +231,32 @@ tahoe_parse_dose <- function(x) {
   dplyr::tibble(conc = conc, unit = unit)
 }
 
-#' Where the cell-level obs data would come from given the environment.
-#' Returns list(type = "local"|"remote"|"fixture", src = path-or-url).
-#' Default (nothing downloaded, no env) is the synthetic fixture so the app is
-#' fast, offline, and CI-safe. Set TAHOE_OBS_REMOTE=1 to query HuggingFace.
-tahoe_obs_source <- function() {
+# TAHOE_OBS_REMOTE truthy? (set, and not "false"/"0").
+.tahoe_remote_opted <- function() {
+  v <- Sys.getenv("TAHOE_OBS_REMOTE", unset = "")
+  nzchar(v) && !identical(tolower(v), "false") && v != "0"
+}
+
+#' Resolve where cell-level obs data comes from -- a single policy, so Overview
+#' and the Cells tab can never disagree about the source within a session.
+#' Returns list(type = "local"|"remote"|"fixture", src). A local download always
+#' wins; otherwise `purpose` decides when the 2.29 GB remote obs is worth it:
+#'  - "counts": cheap one-shot headline aggregates -- go remote when the small
+#'    tables are real (the user downloaded data and wants real numbers) or
+#'    TAHOE_OBS_REMOTE is set.
+#'  - "summary": interactive per-cell aggregation -- go remote ONLY when
+#'    explicitly opted in, so browsing never silently fires repeated 2.29 GB
+#'    scans; otherwise stay on the fast fixture (with a clear provenance badge).
+resolve_obs_source <- function(purpose = c("summary", "counts")) {
+  purpose <- match.arg(purpose)
   local <- file.path(tahoe_data_dir(), "obs_metadata.parquet")
   if (file.exists(local)) {
     return(list(type = "local", src = local))
   }
-  remote <- Sys.getenv("TAHOE_OBS_REMOTE", unset = "")
-  if (nzchar(remote) && !identical(tolower(remote), "false") && remote != "0") {
+  real_tables <- identical(attr(tahoe_drug(), "tahoe_source"), "real")
+  go_remote <- .tahoe_remote_opted() ||
+    (identical(purpose, "counts") && real_tables)
+  if (go_remote) {
     return(list(type = "remote", src = .tahoe_obs_remote_url))
   }
   list(
@@ -228,29 +265,10 @@ tahoe_obs_source <- function() {
   )
 }
 
-#' Obs source to use for the headline dataset counts (cells, cell lines).
-#' These are cheap aggregate queries, so prefer the real data: local file if
-#' present, else a remote scan when the small tables are real (the user has
-#' downloaded data and wants real numbers) or TAHOE_OBS_REMOTE is set, else the
-#' synthetic fixture (pure demo / offline / CI). See [tahoe_summary_counts()].
-.tahoe_obs_count_source <- function() {
-  local <- file.path(tahoe_data_dir(), "obs_metadata.parquet")
-  if (file.exists(local)) {
-    return(list(type = "local", src = local))
-  }
-  remote_env <- Sys.getenv("TAHOE_OBS_REMOTE", unset = "")
-  opted_remote <- nzchar(remote_env) &&
-    !identical(tolower(remote_env), "false") &&
-    remote_env != "0"
-  real_tables <- identical(attr(tahoe_drug(), "tahoe_source"), "real")
-  if (opted_remote || real_tables) {
-    return(list(type = "remote", src = .tahoe_obs_remote_url))
-  }
-  list(
-    type = "fixture",
-    src = file.path(tahoe_fixture_dir(), "obs_metadata.parquet")
-  )
-}
+# Backward-compatible wrappers around the single policy above: per-cell summary
+# queries (Cells tab) vs. the headline count aggregates (Overview).
+tahoe_obs_source <- function() resolve_obs_source("summary")
+.tahoe_obs_count_source <- function() resolve_obs_source("counts")
 
 # Ensure httpfs is available before querying a remote parquet, and register a
 # HuggingFace token as a duckdb secret when one is configured.
@@ -260,6 +278,10 @@ tahoe_obs_source <- function() {
   }
   con <- tahoe_con()
   DBI::dbExecute(con, "INSTALL httpfs; LOAD httpfs;")
+  # Bounded retries/timeout so a flaky remote read fails cleanly instead of
+  # hanging a session (best-effort tuning; ignore if a knob is unavailable).
+  try(DBI::dbExecute(con, "SET http_retries=3"), silent = TRUE)
+  try(DBI::dbExecute(con, "SET http_timeout=60000"), silent = TRUE)
   token <- tahoe_hf_token()
   if (nzchar(token)) {
     DBI::dbExecute(
