@@ -1,7 +1,7 @@
 # Pin the base by R version for reproducibility; keep it aligned with the R
 # version recorded in renv.lock (bump both together). Swap to the nearest
 # available rocker/shiny tag if this exact patch is not published.
-FROM rocker/shiny:4.5.1
+FROM rocker/shiny:4.5.3
 
 ARG CRAN_MIRROR=https://cloud.r-project.org
 ENV CRAN_MIRROR=${CRAN_MIRROR}
