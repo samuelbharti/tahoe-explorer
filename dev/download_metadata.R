@@ -26,6 +26,11 @@ obs_file <- "obs_metadata.parquet"
 args <- commandArgs(trailingOnly = TRUE)
 want_obs <- "--obs" %in% args
 
+# download.file's default timeout is 60s for the *entire* transfer, which is
+# far too short for the 2.29 GB obs file (it aborts mid-download and leaves a
+# corrupt partial). Give large files an hour.
+options(timeout = max(3600, getOption("timeout")))
+
 dest_dir <- Sys.getenv("TAHOE_METADATA_DIR", unset = "data")
 dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -72,6 +77,12 @@ for (f in files) {
       FALSE
     }
   )
+  # A truncated download (e.g. a timeout) leaves a corrupt file that the app
+  # would then treat as real data. Remove any partial so it's never used.
+  if (!ok && file.exists(dest)) {
+    unlink(dest)
+    cat("  removed partial download\n")
+  }
   if (ok && file.exists(dest)) {
     cat(sprintf("  done (%s)\n", fmt_size(file.info(dest)$size)))
   }

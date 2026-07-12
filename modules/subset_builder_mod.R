@@ -133,10 +133,19 @@ subset_builder_ui <- function(id) {
     ),
     bslib::card(
       bslib::card_header("Export subset and analysis recipe"),
+      uiOutput(ns("estimate")),
       subset_export_ui(ns("export"), show_recipe = TRUE)
     )
   )
 }
+
+# Public obs parquet on HuggingFace — the source the generated code reads from,
+# so the snippets run without pre-downloading anything.
+.subset_obs_hf <- "hf://datasets/vevotx/Tahoe-100M/metadata/obs_metadata.parquet"
+
+# Approximate compressed bytes per cell in the obs parquet (~2.29 GB / 100.6M
+# cells), used for the subset size estimate.
+.subset_obs_bytes_per_cell <- 23
 
 # Format an integer for a value box, with an em dash for NA / unknown.
 .subset_fmt <- function(x) {
@@ -350,18 +359,38 @@ subset_builder_server <- function(id) {
     })
 
     output$preview <- reactable::renderReactable({
-      reactable::reactable(
-        matched_samples(),
-        searchable = TRUE,
-        striped = TRUE,
-        highlight = TRUE,
-        compact = TRUE,
-        defaultPageSize = 8,
-        showPageSizeOptions = TRUE
+      tahoe_reactable(matched_samples(), page_size = 8)
+    })
+
+    # Estimated size of the subset: cells (from the grid), matched samples, and
+    # the approximate obs metadata to scan. Expression is separate and larger.
+    estimate <- reactive({
+      cells <- as.integer(sum(grid_filtered()$n_cells, na.rm = TRUE))
+      list(
+        cells = cells,
+        samples = nrow(matched_samples()),
+        obs_mb = round(cells * .subset_obs_bytes_per_cell / 1e6)
       )
     })
 
-    # Copy-paste recipe reproducing the selection on obs_metadata.parquet. The
+    output$estimate <- renderUI({
+      e <- estimate()
+      div(
+        class = "text-muted small mb-2",
+        tags$strong("Estimated pull: "),
+        sprintf(
+          paste(
+            "~%s cells across %s samples · ~%s MB of obs metadata to scan.",
+            "The expression matrix is downloaded separately and is much larger."
+          ),
+          .subset_fmt(e$cells),
+          .subset_fmt(e$samples),
+          .subset_fmt(e$obs_mb)
+        )
+      )
+    })
+
+    # Copy-paste recipe reproducing the selection straight from HuggingFace. The
     # tissue / driver filters are resolved to their concrete cell_name set.
     recipe <- reactive({
       drugs <- sel_drugs()
@@ -438,29 +467,46 @@ subset_builder_server <- function(id) {
       r_predicate <- paste(r_where, collapse = "\n    AND ")
       py_predicate <- paste(py_where, collapse = "\n    & ")
 
+      est <- estimate()
+      header <- paste(
+        "# ── Estimated subset ─────────────────────────────────────────",
+        sprintf(
+          "# ~%s cells across %s samples · ~%s MB of obs metadata to scan.",
+          .subset_fmt(est$cells),
+          .subset_fmt(est$samples),
+          .subset_fmt(est$obs_mb)
+        ),
+        "# The expression matrix is downloaded separately and is larger.",
+        sprintf("# Source: %s", .subset_obs_hf),
+        sep = "\n"
+      )
       r_snippet <- paste(
-        "## R (duckdb) --------------------------------------------------",
+        "## R (duckdb) — pull the subset's cell-level metadata ---------",
         "library(duckdb); library(DBI)",
         "con <- dbConnect(duckdb())",
-        "subset <- dbGetQuery(con, \"",
+        'dbExecute(con, "INSTALL httpfs; LOAD httpfs;")',
+        "obs <- dbGetQuery(con, \"",
         "  SELECT *",
-        "  FROM read_parquet('obs_metadata.parquet')",
+        sprintf("  FROM read_parquet('%s')", .subset_obs_hf),
         sprintf("  WHERE %s", r_predicate),
         "\")",
         "dbDisconnect(con, shutdown = TRUE)",
         sep = "\n"
       )
       py_snippet <- paste(
-        "## Python (pandas / pyarrow) -----------------------------------",
-        "import pandas as pd",
-        "df = pd.read_parquet('obs_metadata.parquet')",
-        sprintf("subset = df[(\n    %s\n)]", py_predicate),
+        "## Python (scanpy / AnnData) — subset cells for analysis ------",
+        "import pandas as pd, scanpy as sc",
+        sprintf('obs = pd.read_parquet(\n    "%s"\n)', .subset_obs_hf),
+        sprintf("mask = (\n    %s\n)", gsub("df\\[", "obs[", py_predicate)),
+        'cells = obs.loc[mask, "BARCODE_SUB_LIB_ID"]',
         "",
-        "# scanpy / AnnData: use the same mask on adata.obs, e.g.",
-        "# adata = adata[subset.index]  (align on the obs index / BARCODE).",
+        "# Point `adata` at the Tahoe-100M expression AnnData, then keep",
+        "# only these cells (obs_names are the BARCODE_SUB_LIB_ID values):",
+        '# adata = sc.read_h5ad("<tahoe_expression.h5ad>", backed="r")',
+        "# adata = adata[adata.obs_names.isin(cells)].to_memory()",
         sep = "\n"
       )
-      paste(r_snippet, "", py_snippet, sep = "\n")
+      paste(header, "", r_snippet, "", py_snippet, sep = "\n")
     })
 
     subset_export_server(

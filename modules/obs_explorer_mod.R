@@ -282,14 +282,7 @@ obs_explorer_server <- function(id) {
     })
 
     output$sample_table <- reactable::renderReactable({
-      reactable::reactable(
-        samples_filtered(),
-        searchable = TRUE,
-        striped = TRUE,
-        highlight = TRUE,
-        compact = TRUE,
-        defaultPageSize = 10
-      )
+      tahoe_reactable(samples_filtered())
     })
 
     subset_export_server(
@@ -396,14 +389,7 @@ obs_explorer_server <- function(id) {
     })
 
     output$obs_table <- reactable::renderReactable({
-      reactable::reactable(
-        obs_result(),
-        searchable = TRUE,
-        striped = TRUE,
-        highlight = TRUE,
-        compact = TRUE,
-        defaultPageSize = 10
-      )
+      tahoe_reactable(obs_result())
     })
 
     subset_export_server(

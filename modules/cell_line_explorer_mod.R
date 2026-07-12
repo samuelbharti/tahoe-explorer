@@ -164,17 +164,7 @@ cell_line_explorer_server <- function(id) {
         )
       }
 
-      reactable::reactable(
-        df,
-        columns = col_defs,
-        searchable = TRUE,
-        sortable = TRUE,
-        highlight = TRUE,
-        compact = TRUE,
-        defaultPageSize = 10,
-        showPageSizeOptions = TRUE,
-        pageSizeOptions = c(10, 25, 50)
-      )
+      tahoe_reactable(df, columns = col_defs)
     })
 
     output$organ_plot <- plotly::renderPlotly({

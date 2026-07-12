@@ -13,8 +13,8 @@ to load 2.29 GB into memory.
 
 - R (>= 4.3)
 - Packages: `shiny`, `bslib`, `brand.yml`, `duckdb`, `dplyr`, `stringr`,
-  `ggplot2`, `scales`, `DT`, `reactable`, `plotly`, `DiagrammeR` (managed with
-  `renv` recommended)
+  `ggplot2`, `scales`, `janitor`, `reactable`, `plotly`, `DiagrammeR` (managed
+  with `renv` recommended)
 
 ## Installation
 
@@ -33,7 +33,7 @@ renv::restore()
 ```r
 install.packages(c(
   "shiny", "bslib", "brand.yml", "duckdb", "dplyr", "stringr",
-  "ggplot2", "scales", "DT", "reactable", "plotly", "DiagrammeR"
+  "ggplot2", "scales", "janitor", "reactable", "plotly", "DiagrammeR"
 ))
 ```
 
