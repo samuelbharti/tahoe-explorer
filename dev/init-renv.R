@@ -34,8 +34,19 @@ runtime <- c(
 )
 
 # Tooling used by dev scripts and the test suite (captured so a restored library
-# can also rebuild data and run the tests).
-tooling <- c("jsonlite", "testthat", "shinytest2", "chromote", "withr")
+# can also rebuild data and run the tests). `promises` + `future` are optional:
+# they are only used when async is enabled (TAHOE_ASYNC=1, see R/async.R), and the
+# app degrades to synchronous when they are absent -- but a hosted deployment that
+# wants non-blocking remote queries needs them in the lockfile, so capture them.
+tooling <- c(
+  "jsonlite",
+  "testthat",
+  "shinytest2",
+  "chromote",
+  "withr",
+  "promises",
+  "future"
+)
 
 if (!file.exists("renv.lock")) {
   message("Initializing renv and installing dependencies ...")
