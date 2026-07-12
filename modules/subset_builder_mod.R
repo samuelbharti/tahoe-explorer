@@ -24,7 +24,15 @@
 subset_builder_ui <- function(id) {
   ns <- NS(id)
 
-  grid <- tryCatch(tahoe_cell_grid(), error = function(e) NULL)
+  # In async mode the grid may be a slow remote build, so we do NOT touch it at
+  # UI-construction time (that would block startup for every session); the server
+  # populates the grid-derived choices once the background task resolves. In the
+  # default synchronous mode this reads the fast local/fixture grid as before.
+  grid <- if (.tahoe_async_enabled()) {
+    NULL
+  } else {
+    tryCatch(tahoe_cell_grid(), error = function(e) NULL)
+  }
   lines <- tryCatch(tahoe_cell_line(), error = function(e) NULL)
   samples <- tryCatch(tahoe_sample(), error = function(e) NULL)
 
@@ -190,8 +198,62 @@ subset_builder_ui <- function(id) {
 
 subset_builder_server <- function(id) {
   moduleServer(id, function(input, output, session) {
-    grid <- reactive(tahoe_cell_grid())
     driver_lines <- reactive(tahoe_cell_line())
+
+    if (.tahoe_async_enabled()) {
+      # Build the grid in a background worker so a slow remote scan never blocks
+      # the main process. Reading $result() suspends dependent reactives (like
+      # req()) until the build finishes, then yields the same tibble the sync
+      # path returns; a worker failure re-throws here and surfaces as an error.
+      grid_task <- tahoe_make_grid_task()
+      grid_task$invoke()
+      grid <- reactive(grid_task$result())
+
+      # The UI built the grid-derived selectize inputs empty (see the UI note);
+      # populate them once the grid resolves. tahoe_cell_line() is a small local
+      # table, so the driver choices stay synchronous. Plate choices come from
+      # tahoe_sample() and are already populated by the UI in both modes.
+      observe({
+        g <- grid()
+        assayed <- unique(g$cell_name)
+        dl <- driver_lines()
+        driver_choices <- if (
+          all(c("cell_name", "Driver_Gene_Symbol") %in% names(dl))
+        ) {
+          .subset_choices(
+            dl[dl$cell_name %in% assayed, , drop = FALSE],
+            "Driver_Gene_Symbol"
+          )
+        } else {
+          character()
+        }
+        updateSelectizeInput(
+          session,
+          "organs",
+          choices = .subset_choices(
+            g,
+            "organ"
+          )
+        )
+        updateSelectizeInput(session, "drivers", choices = driver_choices)
+        updateSelectizeInput(session, "cell_lines", choices = sort(assayed))
+        updateSelectizeInput(
+          session,
+          "drugs",
+          choices = .subset_choices(
+            g,
+            "drug"
+          )
+        )
+        updateSelectizeInput(
+          session,
+          "doses",
+          choices = sort(unique(g$conc[!is.na(g$conc)]))
+        )
+      })
+    } else {
+      grid <- reactive(tahoe_cell_grid())
+    }
 
     sel_organs <- reactive(input$organs %||% character())
     sel_drivers <- reactive(input$drivers %||% character())

@@ -166,7 +166,8 @@ obs_explorer_ui <- function(id) {
             class = "btn-warning btn-sm",
             icon = icon("play")
           )
-        }
+        },
+        uiOutput(ns("obs_status"))
       ),
       bslib::card(
         bslib::card_header("Summary"),
@@ -338,11 +339,44 @@ obs_explorer_server <- function(id) {
       )
     }
 
-    obs_summary <- if (identical(source_type, "remote")) {
+    # When async is enabled AND the source is remote, run the heavy summary in a
+    # background worker so it never blocks the main process (triple-gated:
+    # TAHOE_ASYNC + remote + explicit "Run query"). Otherwise keep the original
+    # synchronous behaviour exactly. The drug-choices helper above stays
+    # synchronous -- it fires once on first run; async-ing it too is a follow-up.
+    use_async_obs <- .tahoe_async_enabled() && identical(source_type, "remote")
+    obs_task <- if (use_async_obs) tahoe_make_obs_task() else NULL
+
+    obs_summary <- if (use_async_obs) {
+      observeEvent(
+        input$run,
+        {
+          req(input$obs_group, input$obs_metric)
+          filters <- list()
+          if (length(input$obs_drug) > 0) {
+            filters$drug <- input$obs_drug
+          }
+          obs_task$invoke(input$obs_group, filters, input$obs_metric, 100)
+        },
+        ignoreNULL = TRUE
+      )
+      reactive(obs_task$result())
+    } else if (identical(source_type, "remote")) {
       eventReactive(input$run, obs_query(), ignoreNULL = TRUE)
     } else {
       reactive(obs_query())
     }
+
+    # Background-query progress hint (async remote only; NULL otherwise).
+    output$obs_status <- renderUI({
+      if (is.null(obs_task) || !identical(obs_task$status(), "running")) {
+        return(NULL)
+      }
+      div(
+        class = "text-muted small mt-2",
+        "Running query in the background…"
+      )
+    })
 
     # Tidy frame for plotting/tabling: friendly, stable column names and a
     # graceful message when the underlying query failed.
