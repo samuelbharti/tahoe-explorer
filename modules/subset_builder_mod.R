@@ -141,7 +141,11 @@ subset_builder_ui <- function(id) {
 
 # Public obs parquet on HuggingFace — the source the generated code reads from,
 # so the snippets run without pre-downloading anything.
-.subset_obs_hf <- "hf://datasets/vevotx/Tahoe-100M/metadata/obs_metadata.parquet"
+.subset_obs_hf <- sprintf(
+  "hf://datasets/%s@%s/metadata/obs_metadata.parquet",
+  .tahoe_dataset_repo,
+  .tahoe_dataset_revision
+)
 
 # Approximate compressed bytes per cell in the obs parquet (~2.29 GB / 100.6M
 # cells), used for the subset size estimate.
