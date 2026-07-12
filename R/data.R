@@ -3,7 +3,7 @@
 # Every module reads through these helpers rather than touching files directly.
 # Resolution order for each table is: real file in the data dir -> bundled
 # synthetic fixture. The app therefore always runs, even with no network and no
-# downloaded data. See docs/plans/00-architecture.md.
+# downloaded data.
 
 # Small in-process cache so repeated reactive reads are cheap.
 .tahoe_cache <- new.env(parent = emptyenv())
@@ -40,7 +40,7 @@
 # duckdb's hf:// protocol, which works anonymously for this public dataset and
 # picks up a HuggingFace token (see .tahoe_hf_token) for authenticated access.
 .tahoe_obs_remote_url <- paste0(
-  "hf://datasets/vevotx/Tahoe-100M/metadata/obs_metadata.parquet"
+  "hf://datasets/tahoebio/Tahoe-100M/metadata/obs_metadata.parquet"
 )
 
 #' HuggingFace access token from the environment, or "" if unset. Checked in
@@ -372,7 +372,7 @@ tahoe_cell_line_unique <- function() {
         sprintf(
           paste0(
             "SELECT count(*) AS cells, ",
-            "count(DISTINCT cell_line) AS cell_lines ",
+            "count(DISTINCT cell_name) AS cell_lines ",
             "FROM read_parquet(%s)"
           ),
           .tahoe_quote(source$src)
@@ -384,7 +384,12 @@ tahoe_cell_line_unique <- function() {
       list(cells = NA_real_, cell_lines = NA_real_, type = source$type)
     }
   )
-  .tahoe_cache$obs_counts <- res
+  # Only cache a real result. Caching the NA error fallback would poison the
+  # cache for the whole process after one transient obs failure (the grid path
+  # above is guarded the same way).
+  if (!is.na(res$cells)) {
+    .tahoe_cache$obs_counts <- res
+  }
   res
 }
 
@@ -447,7 +452,8 @@ tahoe_cell_grid <- function() {
     },
     error = function(e) NULL
   )
-  if (is.null(base)) {
+  failed <- is.null(base)
+  if (failed) {
     base <- dplyr::tibble(
       drug = character(),
       cell_name = character(),
@@ -463,7 +469,13 @@ tahoe_cell_grid <- function() {
     names(ann)[names(ann) == "Organ"] <- "organ"
     base <- dplyr::left_join(base, ann, by = "cell_name")
   }
-  .tahoe_cache$cell_grid <- base
+  # Never cache a failed read: caching the empty error tibble would blank
+  # Subset/Coverage/QC for the whole process after one transient obs failure.
+  # A genuinely-empty successful read is fine to cache; only the failure path
+  # self-heals on the next reactive read.
+  if (!failed) {
+    .tahoe_cache$cell_grid <- base
+  }
   base
 }
 
