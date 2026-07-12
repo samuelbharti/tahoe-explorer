@@ -106,7 +106,16 @@ about_ui <- function(id) {
     ),
     bslib::card(
       bslib::card_header("At a glance"),
-      uiOutput(ns("dims"))
+      uiOutput(ns("dims")),
+      bslib::card_footer(
+        class = "text-muted small",
+        paste(
+          "Counts reflect the data currently loaded — the bundled demo",
+          "fixtures unless you have downloaded the real metadata (see the",
+          "provenance badge, top-right). The figures elsewhere on this page",
+          "describe the full published Tahoe-100M dataset."
+        )
+      )
     ),
     bslib::layout_columns(
       col_widths = c(6, 6),
