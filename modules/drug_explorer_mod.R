@@ -85,6 +85,17 @@ drug_explorer_ui <- function(id) {
         ns("name_search"),
         "Drug name contains",
         placeholder = "e.g. Synthdrug"
+      ),
+      tags$hr(),
+      selectizeInput(
+        ns("focus_drug"),
+        "Cross-reference a drug",
+        choices = NULL,
+        options = list(placeholder = "Pick a drug…")
+      ),
+      div(
+        class = "text-muted small",
+        "Which assayed cell lines carry a mutation in this drug's target."
       )
     ),
     bslib::layout_columns(
@@ -93,6 +104,25 @@ drug_explorer_ui <- function(id) {
         bslib::card_header("Filtered drugs"),
         reactable::reactableOutput(ns("table"))
       )
+    ),
+    bslib::card(
+      full_screen = TRUE,
+      bslib::card_header(
+        class = "d-flex justify-content-between align-items-center",
+        span("Target mutations in assayed cell lines"),
+        .info_pop(
+          paste(
+            "For the drug picked in the sidebar, the assayed cell lines that",
+            "carry a somatic variant in one of its target genes -- the lines",
+            "over which a target-mutant vs wild-type contrast could be designed.",
+            "Restricted to lines present in the obs grid; variants from DepMap /",
+            "Cellosaurus. Empty until variant data is loaded."
+          ),
+          title = "Target mutations"
+        )
+      ),
+      uiOutput(ns("target_mut_caption")),
+      reactable::reactableOutput(ns("target_mut_table"))
     ),
     bslib::layout_columns(
       col_widths = c(6, 6),
@@ -259,6 +289,71 @@ drug_explorer_server <- function(id) {
 
     output$targets_plot <- plotly::renderPlotly({
       tahoe_plotly(.drug_target_bar(filtered(), tahoe_colors$sand))
+    })
+
+    # Populate the cross-reference picker with drugs that declare a target.
+    observeEvent(drugs(), once = TRUE, {
+      d <- drugs()
+      choices <- if ("targets" %in% names(d)) {
+        sort(unique(d$drug[
+          !is.na(d$targets) & nzchar(as.character(d$targets))
+        ]))
+      } else {
+        character(0)
+      }
+      updateSelectizeInput(
+        session,
+        "focus_drug",
+        choices = choices,
+        selected = if (length(choices)) choices[[1]] else character(0),
+        server = TRUE
+      )
+    })
+
+    focus_targets <- reactive(tahoe_drug_targets(input$focus_drug))
+    target_hits <- reactive(tahoe_target_mutations(focus_targets()))
+
+    output$target_mut_caption <- renderUI({
+      genes <- focus_targets()
+      if (length(genes) == 0) {
+        return(div(
+          class = "text-muted small mb-2",
+          "Pick a drug with known targets in the sidebar to see which assayed",
+          "cell lines carry a mutation in them."
+        ))
+      }
+      n_lines <- dplyr::n_distinct(target_hits()$cell_name)
+      n_assayed <- dplyr::n_distinct(tahoe_cell_grid()$cell_name)
+      div(
+        class = "small mb-2",
+        tags$b(input$focus_drug),
+        " targets ",
+        tags$b(paste(genes, collapse = ", ")),
+        sprintf(
+          " — %d of %d assayed cell lines carry a somatic variant in %s.",
+          n_lines,
+          n_assayed,
+          if (length(genes) == 1) "it" else "one of them"
+        )
+      )
+    })
+
+    output$target_mut_table <- reactable::renderReactable({
+      hits <- target_hits()
+      validate(need(
+        nrow(hits) > 0,
+        "No assayed cell line carries a mutation in this drug's target(s)."
+      ))
+      pref <- c(
+        "cell_name",
+        "gene",
+        "protein_change",
+        "variant_type",
+        "consequence",
+        "source"
+      )
+      df <- hits[, intersect(pref, names(hits)), drop = FALSE]
+      tahoe_reactable(df[order(df$gene, df$cell_name), , drop = FALSE])
     })
 
     subset_export_server(
