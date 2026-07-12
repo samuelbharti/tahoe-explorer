@@ -28,6 +28,12 @@ do.call(
       ),
       fillable = FALSE
     ),
-    app_nav_panels()
+    app_nav_panels(),
+    # Right-aligned data-provenance chip so every tab shows whether the numbers
+    # are real Tahoe-100M data or the bundled demo fixtures.
+    list(
+      bslib::nav_spacer(),
+      bslib::nav_item(tahoe_provenance_badge())
+    )
   )
 )
