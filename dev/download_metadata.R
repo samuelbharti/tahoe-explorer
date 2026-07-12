@@ -10,9 +10,15 @@
 #
 # Override the destination with TAHOE_METADATA_DIR (defaults to "data").
 
-base_url <- paste0(
-  "https://huggingface.co/datasets/vevotx/Tahoe-100M/",
-  "resolve/main/metadata/"
+# Pinned dataset revision (keep in sync with .tahoe_dataset_revision in
+# R/data.R) so the downloaded metadata is reproducible, not whatever the mutable
+# default branch happens to hold today.
+dataset_repo <- "tahoebio/Tahoe-100M"
+dataset_revision <- "2dc57900b7981cfcf5e211527169a0b006546a95"
+base_url <- sprintf(
+  "https://huggingface.co/datasets/%s/resolve/%s/metadata/",
+  dataset_repo,
+  dataset_revision
 )
 
 small_files <- c(
@@ -118,8 +124,10 @@ if (requireNamespace("duckdb", quietly = TRUE)) {
             )
           )
         }
-        src <- paste0(
-          "hf://datasets/vevotx/Tahoe-100M/metadata/",
+        src <- sprintf(
+          "hf://datasets/%s@%s/metadata/%s",
+          dataset_repo,
+          dataset_revision,
           obs_file
         )
         cat("  (scanning remote obs; this takes ~30s)\n")

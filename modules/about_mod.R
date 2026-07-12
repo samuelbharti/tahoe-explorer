@@ -283,6 +283,13 @@ about_ui <- function(id) {
           "Cellosaurus"
         ),
         " (cell-line somatic variants, both CC BY 4.0)"
+      ),
+      tags$p(
+        class = "small text-muted mb-0 mt-2",
+        sprintf(
+          "Dataset pinned to Tahoe-100M revision %s for reproducibility.",
+          substr(tahoe_dataset_pin()$revision, 1, 7)
+        )
       )
     )
   )

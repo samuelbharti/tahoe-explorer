@@ -36,11 +36,27 @@
   mean_mread_count = "avg(mread_count)"
 )
 
-# Remote location of the cell-level obs file (used only when opted in). Uses
-# duckdb's hf:// protocol, which works anonymously for this public dataset and
-# picks up a HuggingFace token (see .tahoe_hf_token) for authenticated access.
-.tahoe_obs_remote_url <- paste0(
-  "hf://datasets/vevotx/Tahoe-100M/metadata/obs_metadata.parquet"
+# Pinned Tahoe-100M dataset revision (HuggingFace commit SHA) for reproducibility.
+# The default branch is mutable: an upstream re-upload would otherwise silently
+# change every obs-derived number and any recipe handed off downstream. Bump this
+# deliberately when adopting a newer dataset release (also update the copies in
+# dev/download_metadata.R, which is a standalone script and cannot see this).
+.tahoe_dataset_repo <- "tahoebio/Tahoe-100M"
+.tahoe_dataset_revision <- "2dc57900b7981cfcf5e211527169a0b006546a95"
+
+#' The pinned dataset repo + revision, for display (About) and recipe headers.
+tahoe_dataset_pin <- function() {
+  list(repo = .tahoe_dataset_repo, revision = .tahoe_dataset_revision)
+}
+
+# Remote location of the cell-level obs file (used only when opted in), pinned to
+# the revision above. Uses duckdb's hf:// protocol, which works anonymously for
+# this public dataset and picks up a HuggingFace token (see .tahoe_hf_token) for
+# authenticated access.
+.tahoe_obs_remote_url <- sprintf(
+  "hf://datasets/%s@%s/metadata/obs_metadata.parquet",
+  .tahoe_dataset_repo,
+  .tahoe_dataset_revision
 )
 
 #' HuggingFace access token from the environment, or "" if unset. Checked in

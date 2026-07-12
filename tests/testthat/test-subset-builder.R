@@ -97,12 +97,8 @@ test_that("the recipe embeds the selected drug and plate", {
     expect_true(nzchar(txt))
     expect_match(txt, target_drug, fixed = TRUE)
     expect_match(txt, target_plate, fixed = TRUE)
-    # Reads straight from the public HuggingFace obs parquet.
-    expect_match(
-      txt,
-      "hf://datasets/vevotx/Tahoe-100M/metadata/obs_metadata.parquet",
-      fixed = TRUE
-    )
+    # Reads straight from the pinned HuggingFace obs parquet revision.
+    expect_match(txt, .subset_obs_hf, fixed = TRUE)
     expect_match(txt, "pd.read_parquet", fixed = TRUE)
     expect_match(txt, "scanpy", fixed = TRUE)
     expect_match(txt, "BARCODE_SUB_LIB_ID", fixed = TRUE)
