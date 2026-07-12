@@ -11,7 +11,7 @@
 # Override the destination with TAHOE_METADATA_DIR (defaults to "data").
 
 base_url <- paste0(
-  "https://huggingface.co/datasets/vevotx/Tahoe-100M/",
+  "https://huggingface.co/datasets/tahoebio/Tahoe-100M/",
   "resolve/main/metadata/"
 )
 
@@ -119,7 +119,7 @@ if (requireNamespace("duckdb", quietly = TRUE)) {
           )
         }
         src <- paste0(
-          "hf://datasets/vevotx/Tahoe-100M/metadata/",
+          "hf://datasets/tahoebio/Tahoe-100M/metadata/",
           obs_file
         )
         cat("  (scanning remote obs; this takes ~30s)\n")
