@@ -334,6 +334,33 @@ tahoe_cell_line_unique <- function() {
   if (!is.null(.tahoe_cache$obs_counts)) {
     return(.tahoe_cache$obs_counts)
   }
+  # Prefer the prebuilt cell grid: it is derived from the same obs data and
+  # yields the identical headline totals (sum of cells, distinct cell lines)
+  # from a tiny local file, avoiding a slow remote DISTINCT scan of 100M rows.
+  grid_file <- file.path(tahoe_data_dir(), "obs_cell_grid.parquet")
+  if (file.exists(grid_file)) {
+    grid_res <- tryCatch(
+      {
+        q <- DBI::dbGetQuery(
+          tahoe_con(),
+          sprintf(
+            paste0(
+              "SELECT sum(n_cells) AS cells, ",
+              "count(DISTINCT cell_name) AS cell_lines ",
+              "FROM read_parquet(%s)"
+            ),
+            .tahoe_quote(grid_file)
+          )
+        )
+        list(cells = q$cells, cell_lines = q$cell_lines, type = "grid")
+      },
+      error = function(e) NULL
+    )
+    if (!is.null(grid_res) && !is.na(grid_res$cells)) {
+      .tahoe_cache$obs_counts <- grid_res
+      return(grid_res)
+    }
+  }
   source <- .tahoe_obs_count_source()
   res <- tryCatch(
     {
@@ -438,4 +465,55 @@ tahoe_cell_grid <- function() {
   }
   .tahoe_cache$cell_grid <- base
   base
+}
+
+#' Coverage summary derived from the cell grid: total cells per (drug x cell
+#' line), the set of non-zero doses tested, how many of the 3 doses are present,
+#' and the number of plates. Powers the coverage matrix and QC views. `DMSO_TF`
+#' (the vehicle control, dose 0) is kept — its coverage matters for QC.
+tahoe_coverage <- function() {
+  g <- tahoe_cell_grid()
+  if (nrow(g) == 0) {
+    return(dplyr::tibble(
+      drug = character(),
+      cell_name = character(),
+      organ = character(),
+      n_cells = numeric(),
+      n_doses = integer(),
+      doses = character(),
+      n_plates = integer()
+    ))
+  }
+  dplyr::summarise(
+    dplyr::group_by(g, drug, cell_name, organ),
+    n_cells = sum(n_cells),
+    n_doses = dplyr::n_distinct(conc[conc > 0]),
+    doses = paste(sort(unique(conc[conc > 0])), collapse = ", "),
+    n_plates = dplyr::n_distinct(plate),
+    .groups = "drop"
+  )
+}
+
+#' Analysis conditions from the cell grid: cells per (drug x cell line x dose),
+#' summed over plates. This is the unit most differential analyses compare, so
+#' it is the natural grain for power / low-n QC. `conc == 0` rows are the DMSO
+#' vehicle control.
+tahoe_conditions <- function() {
+  g <- tahoe_cell_grid()
+  if (nrow(g) == 0) {
+    return(dplyr::tibble(
+      drug = character(),
+      cell_name = character(),
+      organ = character(),
+      conc = numeric(),
+      n_cells = numeric(),
+      n_plates = integer()
+    ))
+  }
+  dplyr::summarise(
+    dplyr::group_by(g, drug, cell_name, organ, conc),
+    n_cells = sum(n_cells),
+    n_plates = dplyr::n_distinct(plate),
+    .groups = "drop"
+  )
 }

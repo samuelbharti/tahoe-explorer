@@ -4,31 +4,36 @@
 # them interactively with tahoe_plotly() so every chart shares one look: clean
 # typography, a cohesive Lake-Tahoe palette, hover tooltips, and zoom.
 
-# Palette mirrored from _brand.yml so R plots match the app chrome.
+# Chrome + single-series accents. The accent hues are drawn from the CVD-safe
+# categorical palette below so single-series bars stay on-palette; `primary`
+# keeps the deep lake teal used across the app chrome (_brand.yml).
 tahoe_colors <- list(
-  primary = "#0B7285", # deep lake teal
-  green = "#2F9E44", # evergreen
-  blue = "#1C7ED6", # sky
-  sand = "#E8A317", # sandstone
-  orange = "#E8590C",
-  violet = "#BE4BDB",
+  primary = "#0B7285", # deep lake teal (brand chrome)
+  blue = "#2A78D6", # lake blue
+  green = "#1BAF7A", # aqua-green
+  sand = "#EDA100", # sandstone / yellow
+  orange = "#EB6834",
+  violet = "#4A3AA7",
   slate = "#5F6B7A", # granite
   fg = "#212529",
   grid = "#E4E9ED"
 )
 
 # Ordered qualitative palette for categorical fills (drugs, organs, ...).
+# Colorblind-safe by construction: the ordering maximizes the minimum adjacent
+# CVD separation (worst adjacent ΔE 24.2, well above the ≥12 target under
+# protan/deutan/tritan simulation). Do NOT reorder without re-validating with
+# the dataviz palette validator — the ordering IS the safety mechanism. Leads
+# with lake blue / aqua / evergreen, so it also reads as "Tahoe".
 tahoe_categorical <- c(
-  "#0B7285",
-  "#2F9E44",
-  "#1C7ED6",
-  "#E8590C",
-  "#BE4BDB",
-  "#F08C00",
-  "#1098AD",
-  "#66A80F",
-  "#E64980",
-  "#5C7CFA"
+  "#2A78D6", # blue
+  "#1BAF7A", # aqua
+  "#EDA100", # yellow
+  "#008300", # green
+  "#4A3AA7", # violet
+  "#E34948", # red
+  "#E87BA4", # magenta
+  "#EB6834" # orange
 )
 
 #' n distinct categorical colors, interpolating when n exceeds the base set.
@@ -42,7 +47,7 @@ tahoe_pal <- function(n) {
 #' Shared ggplot2 theme: minimal, Inter-ish, restrained gridlines. Fonts are
 #' applied in the browser by tahoe_plotly(), so no base_family is set here
 #' (avoids R font-registration warnings).
-tahoe_theme <- function(base_size = 13) {
+tahoe_theme <- function(base_size = 14) {
   ggplot2::theme_minimal(base_size = base_size) +
     ggplot2::theme(
       panel.grid.minor = ggplot2::element_blank(),
@@ -50,21 +55,38 @@ tahoe_theme <- function(base_size = 13) {
         color = tahoe_colors$grid,
         linewidth = 0.4
       ),
-      axis.title = ggplot2::element_text(color = tahoe_colors$slate),
-      axis.text = ggplot2::element_text(color = tahoe_colors$slate),
+      axis.title = ggplot2::element_text(
+        color = tahoe_colors$slate,
+        size = ggplot2::rel(0.9),
+        face = "bold"
+      ),
+      axis.text = ggplot2::element_text(
+        color = tahoe_colors$slate,
+        size = ggplot2::rel(0.9)
+      ),
       plot.title = ggplot2::element_text(
         face = "bold",
-        color = tahoe_colors$fg
+        color = tahoe_colors$fg,
+        size = ggplot2::rel(1.05)
       ),
+      plot.margin = ggplot2::margin(6, 10, 6, 6),
       legend.position = "none"
     )
 }
 
 #' Render a ggplot as a styled, interactive plotly widget. `tooltip` selects
 #' which aesthetics appear on hover (defaults to x + y). Chrome is stripped to
-#' a small mode bar (hover, zoom, PNG download) with no plotly logo.
-tahoe_plotly <- function(p, tooltip = c("x", "y")) {
-  plotly::ggplotly(p, tooltip = tooltip) |>
+#' a small mode bar (hover, zoom, PNG download) with no plotly logo. Pass a
+#' `source` id to make the chart emit click events readable in a Shiny server
+#' with `plotly::event_data("plotly_click", source = <id>)` — pair it with a
+#' `key` aesthetic on the marks so the click carries the clicked category.
+tahoe_plotly <- function(p, tooltip = c("x", "y"), source = NULL) {
+  src <- if (is.null(source)) "A" else source
+  widget <- plotly::ggplotly(p, tooltip = tooltip, source = src)
+  if (!is.null(source)) {
+    widget <- plotly::event_register(widget, "plotly_click")
+  }
+  widget |>
     plotly::config(
       displaylogo = FALSE,
       modeBarButtonsToRemove = list(
@@ -81,7 +103,7 @@ tahoe_plotly <- function(p, tooltip = c("x", "y")) {
     plotly::layout(
       font = list(
         family = "Inter, system-ui, sans-serif",
-        size = 13,
+        size = 14,
         color = tahoe_colors$fg
       ),
       hoverlabel = list(
@@ -92,6 +114,65 @@ tahoe_plotly <- function(p, tooltip = c("x", "y")) {
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)"
     )
+}
+
+#' Alpine Lake reactable theme — shared look for every table in the app: Inter
+#' type, teal highlights, restrained hairline borders, tabular figures.
+tahoe_reactable_theme <- function() {
+  reactable::reactableTheme(
+    color = tahoe_colors$fg,
+    borderColor = tahoe_colors$grid,
+    highlightColor = "#EAF3F5", # pale teal wash
+    cellPadding = "8px 10px",
+    style = list(
+      fontFamily = "Inter, system-ui, sans-serif",
+      fontSize = "14px"
+    ),
+    headerStyle = list(
+      color = tahoe_colors$slate,
+      fontWeight = 600,
+      borderBottom = paste0("2px solid ", tahoe_colors$grid)
+    ),
+    searchInputStyle = list(width = "100%")
+  )
+}
+
+#' A reactable with the app's shared, UI-friendly defaults: searchable,
+#' sortable, compact, row highlight, paginated, tabular figures, Alpine theme.
+#' Column headers are normalized to Title Case with janitor::clean_names() so
+#' every table reads consistently; pass `columns` colDefs to override specific
+#' ones (an explicit `name` wins, otherwise the Title Case label is injected).
+#' Extra reactable() arguments (e.g. `selection`, `onClick`) pass through `...`.
+tahoe_reactable <- function(data, columns = list(), ..., page_size = 10) {
+  labels <- janitor::make_clean_names(names(data), case = "title")
+  names(labels) <- names(data)
+  col_defs <- list()
+  for (nm in names(data)) {
+    override <- columns[[nm]]
+    if (is.null(override)) {
+      col_defs[[nm]] <- reactable::colDef(name = labels[[nm]])
+    } else {
+      if (is.null(override$name)) {
+        override$name <- labels[[nm]]
+      }
+      col_defs[[nm]] <- override
+    }
+  }
+  reactable::reactable(
+    data,
+    columns = col_defs,
+    searchable = TRUE,
+    sortable = TRUE,
+    striped = TRUE,
+    highlight = TRUE,
+    compact = TRUE,
+    borderless = FALSE,
+    defaultPageSize = page_size,
+    showPageSizeOptions = TRUE,
+    pageSizeOptions = c(10, 25, 50),
+    theme = tahoe_reactable_theme(),
+    ...
+  )
 }
 
 # Make the shared theme the default for every ggplot in the app.
