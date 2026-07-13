@@ -276,3 +276,75 @@ test_that("chat_agent_server BYOK: connect carries the key, forget clears it", {
     }
   )
 })
+
+test_that("friendly error mapper classifies failures and redacts the key", {
+  f <- .tahoe_agent_friendly_error
+  expect_match(
+    f("API key not valid. Please pass a valid API key."),
+    "key was rejected",
+    ignore.case = TRUE
+  )
+  expect_match(
+    f("429 RESOURCE_EXHAUSTED: quota exceeded"),
+    "Rate limit or quota",
+    ignore.case = TRUE
+  )
+  expect_match(f("503 model is overloaded"), "busy", ignore.case = TRUE)
+  expect_match(
+    f("404 model not found: bad"),
+    "isn't available",
+    ignore.case = TRUE
+  )
+  expect_match(
+    f("400 invalid_argument"),
+    "request was rejected",
+    ignore.case = TRUE
+  )
+  # The key is redacted out of whatever text is surfaced.
+  msg <- f("401 unauthorized for key sk-secret-123", secret = "sk-secret-123")
+  expect_false(grepl("sk-secret-123", msg, fixed = TRUE))
+})
+
+test_that("provider model suggestions default sanely and honour env override", {
+  withr::local_envvar(
+    TAHOE_AGENT_MODELS_GEMINI = NA,
+    TAHOE_AGENT_MODELS_ANTHROPIC = NA
+  )
+  expect_true("gemini-2.5-flash" %in% .tahoe_agent_provider_models("gemini"))
+  expect_true("claude-sonnet-5" %in% .tahoe_agent_provider_models("anthropic"))
+  expect_equal(.tahoe_agent_provider_models("nope"), character(0))
+
+  withr::local_envvar(TAHOE_AGENT_MODELS_GEMINI = "m1, m2")
+  expect_equal(.tahoe_agent_provider_models("gemini"), c("m1", "m2"))
+})
+
+test_that("chat_agent_server surfaces a provider error instead of crashing", {
+  record <- new.env()
+  record$appended <- list()
+  # A client whose stream_async throws synchronously (e.g. an immediate 404).
+  boom_factory <- function(credential) {
+    list(
+      on_tool_request = function(cb) invisible(NULL),
+      stream_async = function(text) stop("404 model not found: nope")
+    )
+  }
+  recorder <- function(response) {
+    record$appended[[length(record$appended) + 1L]] <- response
+    NULL
+  }
+
+  testServer(
+    function(id) {
+      chat_agent_server(id, client_factory = boom_factory, append = recorder)
+    },
+    {
+      session$setInputs(source = "shared")
+      # The turn must NOT error out of the observer (which would kill the
+      # session) -- it appends a friendly, mapped message instead.
+      expect_no_error(session$setInputs(chat_user_input = "hi"))
+      last <- record$appended[[length(record$appended)]]
+      expect_match(last, "isn't available", ignore.case = TRUE)
+      expect_equal(n_turns(), 1L)
+    }
+  )
+})
