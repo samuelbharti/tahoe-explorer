@@ -1,6 +1,6 @@
 {
   "R": {
-    "Version": "4.5.3",
+    "Version": "4.6.1",
     "Repositories": [
       {
         "Name": "CRAN",
@@ -515,11 +515,11 @@
     },
     "Matrix": {
       "Package": "Matrix",
-      "Version": "1.7-4",
+      "Version": "1.7-5",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": ["lattice"],
-      "Hash": "7dbe8933065523bfc227027091bf2b1f"
+      "Hash": "618b5c2d90180b15b4dc02f9a96b2631"
     },
     "memoise": {
       "Package": "memoise",
