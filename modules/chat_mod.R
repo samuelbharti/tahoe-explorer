@@ -1,18 +1,22 @@
 # Chat assistant module.
 #
-# A shinychat chat UI backed by a per-session ellmer Chat (Gemini on Vertex) with
-# hand-written tools over the app's data layer (see R/agent.R, R/agent_tools.R).
+# A shinychat chat UI backed by a per-session ellmer Chat with hand-written tools
+# over the app's data layer (see R/agent.R, R/agent_tools.R). Two credential
+# paths, chosen live via a "Model source" selector:
+#   * the shared server DEFAULT (Gemini on Vertex, the operator's bill), and
+#   * BYOK -- the user pastes their own Gemini/OpenAI/Anthropic key (their bill),
+#     held only in this session's memory.
 #
-# Opt-in and gracefully degrading: when the assistant is not available (packages
-# missing, no Vertex project configured, or force-disabled) the page renders a
-# setup panel built purely from bslib -- it references NO ellmer/shinychat symbols
-# -- so the app (and the CI smoke test) load fine without those packages.
+# Opt-in and gracefully degrading: when neither path is available (packages
+# missing or force-disabled) the page renders a setup panel built purely from
+# bslib -- it references NO ellmer/shinychat symbols -- so the app (and the CI
+# smoke test) load fine without those packages.
 
 # Setup panel shown when the assistant is off. Uses only bslib/shiny, so it is
 # safe to evaluate at UI-build time even when ellmer/shinychat are not installed.
 .chat_disabled_panel <- function() {
   bslib::card(
-    bslib::card_header("Configure Google Vertex to enable the assistant"),
+    bslib::card_header("Enable the AI assistant"),
     bslib::card_body(
       p("The AI assistant is off in this environment. To enable it:"),
       tags$ol(
@@ -24,20 +28,13 @@
           " R packages (both are in renv.lock)."
         ),
         tags$li(
-          "Authenticate with Google Cloud: ",
+          "Then either configure the shared assistant (Google Vertex -- run ",
           tags$code("gcloud auth application-default login"),
-          "."
-        ),
-        tags$li(
-          "Set ",
+          " and set ",
           tags$code("TAHOE_VERTEX_PROJECT"),
-          " (and optionally ",
-          tags$code("TAHOE_VERTEX_LOCATION"),
-          ") in your ",
+          " in ",
           tags$code(".Renviron"),
-          " -- see ",
-          tags$code(".Renviron.example"),
-          "."
+          "), or simply bring your own API key in the chat sidebar."
         )
       ),
       p(
@@ -55,12 +52,25 @@ chat_agent_ui <- function(id) {
     h3("Ask the Tahoe assistant"),
     p(
       class = "text-muted",
-      "A Gemini-backed assistant with tools over this app's data layer. It can",
-      "explain the Tahoe-100M dataset and this app, and help you plan a subset."
+      "An AI assistant with tools over this app's data layer. It can explain the",
+      "Tahoe-100M dataset and this app, and help you plan a subset."
     )
   )
 
-  if (!tahoe_agent_available()) {
+  if (!tahoe_agent_enabled()) {
+    return(tagList(header, .chat_disabled_panel()))
+  }
+
+  # Model-source choices: the shared default (when configured) plus every offered
+  # BYOK provider. Names are user-facing labels; values are stable ids.
+  choices <- character(0)
+  if (tahoe_agent_default_available()) {
+    choices <- c(choices, "Shared assistant (Gemini on Vertex)" = "shared")
+  }
+  for (p in tahoe_agent_byok_providers()) {
+    choices[.tahoe_agent_provider_meta(p)$label] <- p
+  }
+  if (length(choices) == 0) {
     return(tagList(header, .chat_disabled_panel()))
   }
 
@@ -68,13 +78,48 @@ chat_agent_ui <- function(id) {
     header,
     bslib::layout_sidebar(
       sidebar = bslib::sidebar(
-        title = "Session",
-        width = 260,
-        uiOutput(ns("usage")),
+        title = "Model source",
+        width = 300,
+        selectInput(
+          ns("source"),
+          label = NULL,
+          choices = choices,
+          selected = unname(choices)[1]
+        ),
+        # Key form: shown for any BYOK provider, hidden for the shared default.
+        conditionalPanel(
+          condition = "input.source && input.source != 'shared'",
+          ns = ns,
+          uiOutput(ns("key_help")),
+          passwordInput(
+            ns("api_key"),
+            "API key",
+            placeholder = "Paste your key (kept in this session only)"
+          ),
+          textInput(
+            ns("model"),
+            "Model (optional)",
+            placeholder = "leave blank for the provider default"
+          ),
+          div(
+            class = "d-flex gap-2 mb-2",
+            actionButton(
+              ns("connect"),
+              "Connect",
+              class = "btn-primary btn-sm"
+            ),
+            actionButton(
+              ns("forget"),
+              "Forget key",
+              class = "btn-outline-secondary btn-sm"
+            )
+          )
+        ),
+        uiOutput(ns("cred_status")),
         tags$p(
           class = "text-muted small",
-          "One assistant per session. Ask about Tahoe-100M, the app, drugs,",
-          "cell lines, or building a subset."
+          "Ask about Tahoe-100M, the app, drugs, cell lines, or building a",
+          "subset. Switching source starts a fresh conversation."
         )
       ),
       shinychat::chat_ui(
@@ -90,21 +135,21 @@ chat_agent_ui <- function(id) {
   )
 }
 
-#' Chat assistant server. `client_factory` builds the ellmer Chat (defaults to
-#' tahoe_agent_client); `append` sends a response to the chat widget (defaults to
-#' shinychat::chat_append). Both are injectable so tests can drive the module with
-#' a stub client and a recorder -- no network, no credentials. Injecting a
-#' `client_factory` forces the enabled path even when the assistant is otherwise
-#' unavailable.
+#' Chat assistant server. `client_factory(credential)` builds the ellmer Chat
+#' for a credential (defaults to tahoe_agent_client); `append` sends a response
+#' to the chat widget (defaults to shinychat::chat_append). Both are injectable
+#' so tests drive the module with a stub client and a recorder -- no network, no
+#' credentials. Injecting a `client_factory` also forces the enabled path even
+#' when the assistant is otherwise unavailable (e.g. the disabled test suite).
 chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
   moduleServer(id, function(input, output, session) {
-    enabled <- !is.null(client_factory) || tahoe_agent_available()
+    enabled <- !is.null(client_factory) || tahoe_agent_enabled()
     if (!enabled) {
       return(invisible(NULL))
     }
 
     factory <- if (is.null(client_factory)) {
-      tahoe_agent_client
+      function(credential) tahoe_agent_client(credential = credential)
     } else {
       client_factory
     }
@@ -115,41 +160,115 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
     } else {
       append
     }
-
-    client <- tryCatch(
-      factory(),
-      error = function(e) {
-        warning("chat client init failed: ", conditionMessage(e))
-        NULL
-      }
-    )
-
-    # Record which tools fired this turn, for a "tools used" footer.
-    tools_used <- reactiveVal(character())
-    if (!is.null(client) && is.function(client$on_tool_request)) {
-      client$on_tool_request(function(request) {
-        nm <- tryCatch(
-          request@name,
-          error = function(e) tryCatch(request$name, error = function(e2) NULL)
-        )
-        if (!is.null(nm) && nzchar(nm)) {
-          isolate(tools_used(c(tools_used(), nm)))
-        }
-      })
+    do_clear <- function() {
+      tryCatch(shinychat::chat_clear("chat"), error = function(e) NULL)
     }
 
+    client <- reactiveVal(NULL)
+    tools_used <- reactiveVal(character())
     n_turns <- reactiveVal(0L)
+    status <- reactiveVal(list(ok = FALSE, msg = "Not connected."))
+
+    # Attach the per-turn tool-name recorder to a freshly built client (for the
+    # "tools used" footer). Re-attached on every rebuild.
+    wire_tools <- function(cl) {
+      if (!is.null(cl) && is.function(cl$on_tool_request)) {
+        cl$on_tool_request(function(request) {
+          nm <- tryCatch(
+            request@name,
+            error = function(e) {
+              tryCatch(request$name, error = function(e2) NULL)
+            }
+          )
+          if (!is.null(nm) && nzchar(nm)) {
+            isolate(tools_used(c(tools_used(), nm)))
+          }
+        })
+      }
+      invisible(cl)
+    }
+
+    # Build (or clear) the session client for a credential and reset the convo.
+    # `secret` is redacted from any error surfaced to the user.
+    set_client <- function(credential, ok_msg, secret = "") {
+      cl <- tryCatch(
+        factory(credential),
+        error = function(e) {
+          status(list(
+            ok = FALSE,
+            msg = paste0(
+              "Could not connect: ",
+              .tahoe_agent_redact(conditionMessage(e), secret)
+            )
+          ))
+          NULL
+        }
+      )
+      if (!is.null(cl)) {
+        wire_tools(cl)
+        status(list(ok = TRUE, msg = ok_msg))
+      }
+      client(cl)
+      n_turns(0L)
+      tools_used(character())
+      do_clear()
+    }
+
+    # React to the model-source selector. "shared" builds the Vertex client
+    # immediately; a BYOK provider waits for the user to Connect a key.
+    observeEvent(input$source, {
+      src <- input$source
+      if (is.null(src) || !nzchar(src)) {
+        return()
+      }
+      if (identical(src, "shared")) {
+        set_client(
+          tahoe_agent_default_credential(),
+          "Connected: shared assistant."
+        )
+      } else {
+        client(NULL)
+        do_clear()
+        status(list(ok = FALSE, msg = "Enter your key and click Connect."))
+      }
+    })
+
+    observeEvent(input$connect, {
+      src <- input$source
+      if (is.null(src) || identical(src, "shared")) {
+        return()
+      }
+      key <- trimws(input$api_key %||% "")
+      if (!nzchar(key)) {
+        status(list(ok = FALSE, msg = "Please paste an API key first."))
+        return()
+      }
+      model <- trimws(input$model %||% "")
+      label <- .tahoe_agent_provider_meta(src)$label
+      set_client(
+        tahoe_agent_byok_credential(src, key, model),
+        paste0("Connected: ", label, "."),
+        secret = key
+      )
+      # Clear the visible key field; the built client already holds what it needs.
+      updateTextInput(session, "api_key", value = "")
+    })
+
+    observeEvent(input$forget, {
+      client(NULL)
+      updateTextInput(session, "api_key", value = "")
+      status(list(ok = FALSE, msg = "Key forgotten. Enter a key and Connect."))
+      do_clear()
+    })
 
     observeEvent(input$chat_user_input, {
       msg <- input$chat_user_input
       if (is.null(msg) || !nzchar(trimws(msg))) {
         return()
       }
-      if (is.null(client)) {
-        do_append(paste(
-          "The assistant failed to initialize.",
-          "Check the server logs and your Vertex credentials."
-        ))
+      cl <- client()
+      if (is.null(cl)) {
+        do_append("Select a model source and connect before chatting.")
         return()
       }
       if (n_turns() >= .tahoe_agent_max_turns()) {
@@ -162,7 +281,7 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
       n_turns(n_turns() + 1L)
       tools_used(character())
 
-      stream <- client$stream_async(msg)
+      stream <- cl$stream_async(msg)
       p <- do_append(stream)
 
       if (!is.null(p) && inherits(p, "promise")) {
@@ -181,24 +300,47 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
           onRejected = function(err) {
             do_append(paste0(
               "Sorry, something went wrong: ",
-              conditionMessage(err)
+              .tahoe_agent_redact(conditionMessage(err))
             ))
           }
         )
       }
     })
 
-    output$usage <- renderUI({
-      div(
-        class = "text-muted small",
-        sprintf("Turns this session: %d", n_turns())
+    output$key_help <- renderUI({
+      src <- input$source
+      if (is.null(src) || identical(src, "shared")) {
+        return(NULL)
+      }
+      meta <- .tahoe_agent_provider_meta(src)
+      if (is.null(meta$key_url)) {
+        return(NULL)
+      }
+      tags$p(
+        class = "small mb-1",
+        tags$a(
+          href = meta$key_url,
+          target = "_blank",
+          rel = "noopener",
+          "Get a key"
+        ),
+        " for ",
+        meta$label,
+        "."
       )
+    })
+
+    output$cred_status <- renderUI({
+      st <- status()
+      cls <- if (isTRUE(st$ok)) "text-success" else "text-muted"
+      div(class = paste("small mb-2", cls), st$msg)
     })
 
     invisible(list(
       client = client,
       n_turns = n_turns,
-      tools_used = tools_used
+      tools_used = tools_used,
+      status = status
     ))
   })
 }

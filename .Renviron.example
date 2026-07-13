@@ -35,3 +35,12 @@
 # Set to 1 to force the Chat tab off even when the above are set (the test suite
 # sets this).
 # TAHOE_AGENT_DISABLE=1
+#
+# Bring your own key (BYOK): in addition to (or instead of) the shared Vertex
+# assistant above, users can paste their own provider key in the chat sidebar.
+# The key is held only in their browser session -- never stored or logged -- and
+# runs on their own account. BYOK is ON by default whenever the packages are
+# installed; set to 0 to remove the option.
+# TAHOE_AGENT_BYOK=1
+# Which BYOK providers to offer (comma list; unknown names are ignored).
+# TAHOE_AGENT_BYOK_PROVIDERS=gemini,openai,anthropic

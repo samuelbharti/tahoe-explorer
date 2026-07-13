@@ -70,20 +70,90 @@ tahoe_agent_temperature <- function() {
 .tahoe_agent_row_cap <- function() 50L
 .tahoe_agent_max_turns <- function() 25L
 
-#' Whether the assistant can run. TRUE only when NOT force-disabled, ellmer +
-#' shinychat are installed, and a Vertex project is configured. Intentionally
-#' UNCACHED (the inputs are cheap Sys.getenv/requireNamespace) so env-toggling
-#' tests work, and it NEVER touches the network.
-tahoe_agent_available <- function() {
-  if (.tahoe_env_truthy(Sys.getenv("TAHOE_AGENT_DISABLE", unset = ""))) {
-    return(FALSE)
-  }
-  # gargle is needed for Vertex Application Default Credentials (it is a Suggests
-  # of ellmer, so requiring it here also pins it into renv.lock).
+# --- Availability gating ------------------------------------------------------
+#
+# The assistant has two credential paths, and the Chat page is active if EITHER
+# is usable:
+#   * the shared server DEFAULT (Vertex ADC -- the operator's bill), and/or
+#   * BYOK -- the user pastes their own provider API key (their bill).
+# Splitting the gate lets a public deployment offer BYOK even when no shared
+# default is configured. Everything here is UNCACHED (cheap Sys.getenv /
+# requireNamespace) so env-toggling tests work, and NEVER touches the network.
+
+# Global kill switch (the test suite sets TAHOE_AGENT_DISABLE=1).
+.tahoe_agent_disabled <- function() {
+  .tahoe_env_truthy(Sys.getenv("TAHOE_AGENT_DISABLE", unset = ""))
+}
+
+#' The chat packages are present -- the floor for ANY assistant path.
+tahoe_agent_packages_ok <- function() {
   requireNamespace("ellmer", quietly = TRUE) &&
-    requireNamespace("shinychat", quietly = TRUE) &&
+    requireNamespace("shinychat", quietly = TRUE)
+}
+
+#' Whether the shared DEFAULT (Vertex) assistant is usable: packages + gargle
+#' (for ADC) + a configured project, and not force-disabled. gargle is a
+#' Suggests of ellmer; requiring it here also pins it into renv.lock.
+tahoe_agent_default_available <- function() {
+  !.tahoe_agent_disabled() &&
+    tahoe_agent_packages_ok() &&
     requireNamespace("gargle", quietly = TRUE) &&
     nzchar(.tahoe_vertex_project())
+}
+
+#' Back-compat alias: historically "available" meant the shared default path.
+tahoe_agent_available <- function() {
+  tahoe_agent_default_available()
+}
+
+#' Whether BYOK (user-supplied key) is offered: packages present, not
+#' force-disabled, and not explicitly turned off. Defaults ON so a public
+#' deployment can always fall back to a user's own key.
+tahoe_agent_byok_enabled <- function() {
+  !.tahoe_agent_disabled() &&
+    tahoe_agent_packages_ok() &&
+    .tahoe_env_truthy(Sys.getenv("TAHOE_AGENT_BYOK", unset = "1"))
+}
+
+#' Whether the Chat page is active (chat UI vs. static setup panel): either path.
+tahoe_agent_enabled <- function() {
+  tahoe_agent_default_available() || tahoe_agent_byok_enabled()
+}
+
+# BYOK providers we know how to build (all take a plain api_key). Vertex is the
+# server default and is intentionally NOT a BYOK option: it needs ADC / service
+# account credentials, not a pasteable key.
+.tahoe_agent_known_byok <- c("gemini", "openai", "anthropic")
+
+#' The BYOK providers to offer, from TAHOE_AGENT_BYOK_PROVIDERS (a comma list),
+#' intersected with the known set so an unknown name can never reach a backend.
+tahoe_agent_byok_providers <- function() {
+  raw <- Sys.getenv(
+    "TAHOE_AGENT_BYOK_PROVIDERS",
+    unset = paste(.tahoe_agent_known_byok, collapse = ",")
+  )
+  parts <- trimws(strsplit(raw, ",", fixed = TRUE)[[1]])
+  intersect(parts[nzchar(parts)], .tahoe_agent_known_byok)
+}
+
+#' UI metadata for a BYOK provider: a display label and where to get a key.
+.tahoe_agent_provider_meta <- function(provider) {
+  switch(
+    provider,
+    gemini = list(
+      label = "Google Gemini (your key)",
+      key_url = "https://aistudio.google.com/apikey"
+    ),
+    openai = list(
+      label = "OpenAI (your key)",
+      key_url = "https://platform.openai.com/api-keys"
+    ),
+    anthropic = list(
+      label = "Anthropic Claude (your key)",
+      key_url = "https://console.anthropic.com/settings/keys"
+    ),
+    list(label = provider, key_url = NULL)
+  )
 }
 
 # --- System prompt -----------------------------------------------------------
@@ -172,24 +242,140 @@ tahoe_agent_system_prompt <- function() {
 
 # --- ellmer client -----------------------------------------------------------
 
-#' Build a per-session ellmer Chat backed by Vertex/Gemini, with the Tahoe tool
-#' suite registered. Constructed once per Shiny session (at chat_agent_server
-#' init) so each user gets an isolated conversation. Only called on the enabled
-#' path, so ellmer is guaranteed present here.
-tahoe_agent_client <- function(
-  system_prompt = tahoe_agent_system_prompt(),
-  tools = tahoe_agent_tools()
+# A backend is a constructor(system_prompt, params, echo, model, api_key) that
+# returns an ellmer Chat. Kept as a small registry so tahoe_agent_client() is
+# provider-agnostic and tests can inject fakes (no network, no real keys). An
+# empty `model` means "use the provider's own default"; `api_key` is ignored by
+# the Vertex backend, which authenticates via ADC.
+.tahoe_agent_backends <- function() {
+  list(
+    vertex = function(system_prompt, params, echo, model = "", api_key = "") {
+      ellmer::chat_google_vertex(
+        location = .tahoe_vertex_location(),
+        project_id = .tahoe_vertex_project(),
+        model = if (nzchar(model)) model else tahoe_agent_model(),
+        system_prompt = system_prompt,
+        params = params,
+        echo = echo
+      )
+    },
+    gemini = function(system_prompt, params, echo, model = "", api_key = "") {
+      .tahoe_agent_build_keyed(
+        ellmer::chat_google_gemini,
+        system_prompt,
+        params,
+        echo,
+        model,
+        api_key
+      )
+    },
+    openai = function(system_prompt, params, echo, model = "", api_key = "") {
+      .tahoe_agent_build_keyed(
+        ellmer::chat_openai,
+        system_prompt,
+        params,
+        echo,
+        model,
+        api_key
+      )
+    },
+    anthropic = function(
+      system_prompt,
+      params,
+      echo,
+      model = "",
+      api_key = ""
+    ) {
+      .tahoe_agent_build_keyed(
+        ellmer::chat_anthropic,
+        system_prompt,
+        params,
+        echo,
+        model,
+        api_key
+      )
+    }
+  )
+}
+
+# Shared builder for the key-based providers: pass `model` only when supplied,
+# otherwise let ellmer pick the provider default.
+.tahoe_agent_build_keyed <- function(
+  fn,
+  system_prompt,
+  params,
+  echo,
+  model,
+  api_key
 ) {
-  chat <- ellmer::chat_google_vertex(
-    location = .tahoe_vertex_location(),
-    project_id = .tahoe_vertex_project(),
-    model = tahoe_agent_model(),
+  args <- list(
     system_prompt = system_prompt,
-    params = ellmer::params(
-      temperature = tahoe_agent_temperature(),
-      max_tokens = .tahoe_agent_max_tokens()
-    ),
-    echo = "none"
+    api_key = api_key,
+    params = params,
+    echo = echo
+  )
+  if (nzchar(model)) {
+    args$model <- model
+  }
+  do.call(fn, args)
+}
+
+#' The shared-default credential (Vertex ADC). See tahoe_agent_client().
+tahoe_agent_default_credential <- function() {
+  list(kind = "vertex")
+}
+
+#' A BYOK credential from a user-supplied key.
+tahoe_agent_byok_credential <- function(provider, api_key, model = "") {
+  list(kind = "byok", provider = provider, api_key = api_key, model = model)
+}
+
+# Redact a known secret from a message before it is shown or logged. Provider
+# errors can echo the key (e.g. in a URL); this keeps it out of the UI and logs.
+.tahoe_agent_redact <- function(msg, secret = "") {
+  msg <- paste(as.character(msg), collapse = " ")
+  if (length(secret) == 1 && nzchar(secret)) {
+    msg <- gsub(secret, "<redacted-key>", msg, fixed = TRUE)
+  }
+  msg
+}
+
+#' Build a per-session ellmer Chat for a `credential`, with the Tahoe tool suite
+#' registered. `credential` is either the Vertex default or a BYOK spec (see the
+#' `tahoe_agent_*_credential` helpers); the backend is chosen from its provider.
+#' Constructed per Shiny session so each user has an isolated conversation.
+#' `backends` is injectable so tests exercise selection without a network or a
+#' real key. Only called on an enabled path, so the chat packages are present.
+tahoe_agent_client <- function(
+  credential = tahoe_agent_default_credential(),
+  system_prompt = tahoe_agent_system_prompt(),
+  tools = tahoe_agent_tools(),
+  backends = .tahoe_agent_backends()
+) {
+  provider <- if (identical(credential$kind, "byok")) {
+    credential$provider
+  } else {
+    "vertex"
+  }
+  ctor <- backends[[provider]]
+  if (is.null(ctor)) {
+    stop("unknown chat provider: ", provider)
+  }
+  if (
+    identical(credential$kind, "byok") && !nzchar(credential$api_key %||% "")
+  ) {
+    stop("an API key is required")
+  }
+  params <- ellmer::params(
+    temperature = tahoe_agent_temperature(),
+    max_tokens = .tahoe_agent_max_tokens()
+  )
+  chat <- ctor(
+    system_prompt = system_prompt,
+    params = params,
+    echo = "none",
+    model = credential$model %||% "",
+    api_key = credential$api_key %||% ""
   )
   for (spec in tools) {
     chat$register_tool(.tahoe_agent_ellmer_tool(spec))

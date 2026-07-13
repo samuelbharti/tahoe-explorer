@@ -104,7 +104,13 @@ configured (and `ellmer` + `shinychat` are installed), the Chat tab shows a shor
 setup panel and the rest of the app is unaffected. Nothing about the assistant is
 loaded unless the tab is enabled.
 
-To enable it:
+It can be powered two ways, chosen live from a **Model source** selector in the
+chat sidebar: a **shared** assistant the operator configures on Google Vertex
+(below), and/or **bring your own key** — each user pastes their own Gemini,
+OpenAI, or Anthropic key, held only in their browser session and never stored or
+logged. Either path alone is enough to enable the tab.
+
+To configure the shared assistant:
 
 1. Install the packages (both are in `renv.lock`): `renv::restore()`, or
    `install.packages(c("ellmer", "shinychat"))`.
@@ -130,11 +136,18 @@ Configuration via environment variables:
   answers).
 - `TAHOE_AGENT_DISABLE` — set to `1` to force the tab off even when configured
   (the test suite sets this).
+- `TAHOE_AGENT_BYOK` — set to `0` to remove the bring-your-own-key option (on by
+  default whenever the packages are installed).
+- `TAHOE_AGENT_BYOK_PROVIDERS` — comma list of BYOK providers to offer (default
+  `gemini,openai,anthropic`; unknown names are ignored).
 
 The assistant sticks to the Tahoe-100M dataset, this app, and subset planning; it
 declines clinical or medical advice and off-topic requests. In Docker there is no
-`gcloud` login, so the tab degrades to the setup panel unless you provide
-credentials (for example, a mounted service-account key or workload identity).
+`gcloud` login, so the shared assistant degrades to the setup panel unless you
+provide credentials (for example, a mounted service-account key or workload
+identity) — but users can still bring their own key. Because a bring-your-own key
+travels from the browser to the server, **serve the app over HTTPS** for any
+public deployment.
 
 ## Build And Run With Docker
 
