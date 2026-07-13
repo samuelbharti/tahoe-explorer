@@ -31,6 +31,7 @@
 .tahoe_vertex_project <- function() {
   .tahoe_env_first(c(
     "TAHOE_VERTEX_PROJECT",
+    "VERTEX_PROJECT_ID",
     "GOOGLE_CLOUD_PROJECT",
     "GCLOUD_PROJECT"
   ))
@@ -39,7 +40,12 @@
 #' Vertex region. Defaults to us-central1 (Gemini flash is broadly available).
 .tahoe_vertex_location <- function() {
   .tahoe_env_first(
-    c("TAHOE_VERTEX_LOCATION", "GOOGLE_CLOUD_LOCATION", "GOOGLE_CLOUD_REGION"),
+    c(
+      "TAHOE_VERTEX_LOCATION",
+      "VERTEX_LOCATION",
+      "GOOGLE_CLOUD_LOCATION",
+      "GOOGLE_CLOUD_REGION"
+    ),
     default = "us-central1"
   )
 }
