@@ -137,6 +137,14 @@
       "Requirements": [],
       "Hash": "8cba62334c1088d21689d353a7e87663"
     },
+    "coro": {
+      "Package": "coro",
+      "Version": "1.1.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": ["rlang"],
+      "Hash": "4998c8836ff95c90993a4eb8d853df71"
+    },
     "cpp11": {
       "Package": "cpp11",
       "Version": "0.5.5",
@@ -233,6 +241,14 @@
       "Requirements": ["DBI"],
       "Hash": "a3a2d5fa43fd3ce1c3614258fb33cf67"
     },
+    "ellmer": {
+      "Package": "ellmer",
+      "Version": "0.4.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": ["cli", "coro", "glue", "httr2", "jsonlite", "later", "lifecycle", "promises", "R6", "rlang", "S7", "tibble", "vctrs"],
+      "Hash": "25b2aceaf360425303e5b47d4c87a2c7"
+    },
     "evaluate": {
       "Package": "evaluate",
       "Version": "1.0.5",
@@ -280,6 +296,14 @@
       "Repository": "CRAN",
       "Requirements": ["digest", "globals", "listenv", "parallelly"],
       "Hash": "b6e82bb76281ac612788232b3cdfa3d9"
+    },
+    "gargle": {
+      "Package": "gargle",
+      "Version": "1.6.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": ["cli", "fs", "glue", "httr", "jsonlite", "lifecycle", "openssl", "rappdirs", "rlang", "withr"],
+      "Hash": "99e4f3f00be5075372bb650a3e237a71"
     },
     "generics": {
       "Package": "generics",
@@ -768,6 +792,14 @@
       "Repository": "CRAN",
       "Requirements": ["bslib", "cachem", "cli", "commonmark", "fastmap", "fontawesome", "glue", "htmltools", "httpuv", "jsonlite", "later", "lifecycle", "mime", "otel", "promises", "R6", "rlang", "sourcetools", "withr", "xtable"],
       "Hash": "e71fb3fcf73db153eccd8afed293984f"
+    },
+    "shinychat": {
+      "Package": "shinychat",
+      "Version": "0.4.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": ["base64enc", "bslib", "cli", "coro", "ellmer", "fastmap", "htmltools", "jsonlite", "lifecycle", "promises", "rlang", "S7", "shiny"],
+      "Hash": "327359409f9d5a690e018aa0054debf9"
     },
     "shinytest2": {
       "Package": "shinytest2",
