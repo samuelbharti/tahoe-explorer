@@ -96,10 +96,19 @@ chat_agent_ui <- function(id) {
             "API key",
             placeholder = "Paste your key (kept in this session only)"
           ),
-          textInput(
+          # Model picker: choose a suggested model or type any id the key
+          # supports (create = TRUE). Left empty -> the provider's own default.
+          # Choices are repopulated per provider in the server.
+          selectizeInput(
             ns("model"),
-            "Model (optional)",
-            placeholder = "leave blank for the provider default"
+            "Model",
+            choices = character(0),
+            selected = character(0),
+            multiple = FALSE,
+            options = list(
+              create = TRUE,
+              placeholder = "Provider default - pick or type a model"
+            )
           ),
           div(
             class = "d-flex gap-2 mb-2",
@@ -168,6 +177,9 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
     tools_used <- reactiveVal(character())
     n_turns <- reactiveVal(0L)
     status <- reactiveVal(list(ok = FALSE, msg = "Not connected."))
+    # The active BYOK key, held only to redact it from any surfaced error.
+    # "" for the shared path or before a key is connected.
+    active_secret <- reactiveVal("")
 
     # Attach the per-turn tool-name recorder to a freshly built client (for the
     # "tools used" footer). Re-attached on every rebuild.
@@ -221,6 +233,7 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
       if (is.null(src) || !nzchar(src)) {
         return()
       }
+      active_secret("")
       if (identical(src, "shared")) {
         set_client(
           tahoe_agent_default_credential(),
@@ -229,6 +242,14 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
       } else {
         client(NULL)
         do_clear()
+        # Repopulate the model picker with this provider's suggestions.
+        updateSelectizeInput(
+          session,
+          "model",
+          choices = .tahoe_agent_provider_models(src),
+          selected = character(0),
+          server = FALSE
+        )
         status(list(ok = FALSE, msg = "Enter your key and click Connect."))
       }
     })
@@ -250,12 +271,14 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
         paste0("Connected: ", label, "."),
         secret = key
       )
+      active_secret(key)
       # Clear the visible key field; the built client already holds what it needs.
       updateTextInput(session, "api_key", value = "")
     })
 
     observeEvent(input$forget, {
       client(NULL)
+      active_secret("")
       updateTextInput(session, "api_key", value = "")
       status(list(ok = FALSE, msg = "Key forgotten. Enter a key and Connect."))
       do_clear()
@@ -280,9 +303,20 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
       }
       n_turns(n_turns() + 1L)
       tools_used(character())
+      secret <- active_secret()
 
-      stream <- cl$stream_async(msg)
-      p <- do_append(stream)
+      # Guard BOTH failure paths so a provider error (bad key, quota, unknown
+      # model, overload) surfaces as a chat message instead of an unhandled
+      # observer error -- which would tear down the Shiny session:
+      #   * stream_async() / chat_append() throwing synchronously -> tryCatch
+      #   * the streaming promise rejecting mid-turn -> onRejected
+      p <- tryCatch(
+        do_append(cl$stream_async(msg)),
+        error = function(e) {
+          do_append(.tahoe_agent_friendly_error(conditionMessage(e), secret))
+          NULL
+        }
+      )
 
       if (!is.null(p) && inherits(p, "promise")) {
         promises::then(
@@ -298,9 +332,9 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
             }
           },
           onRejected = function(err) {
-            do_append(paste0(
-              "Sorry, something went wrong: ",
-              .tahoe_agent_redact(conditionMessage(err))
+            do_append(.tahoe_agent_friendly_error(
+              conditionMessage(err),
+              secret
             ))
           }
         )

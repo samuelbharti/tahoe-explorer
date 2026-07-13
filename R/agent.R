@@ -156,6 +156,28 @@ tahoe_agent_byok_providers <- function() {
   )
 }
 
+#' Suggested model ids for a BYOK provider's picker, overridable via
+#' TAHOE_AGENT_MODELS_<PROVIDER> (a comma list). These are only a convenience:
+#' the picker also accepts a typed-in id, and a blank model makes each backend
+#' fall back to the provider's own default. Keep in sync with current model ids.
+.tahoe_agent_provider_models <- function(provider) {
+  env <- Sys.getenv(
+    paste0("TAHOE_AGENT_MODELS_", toupper(provider)),
+    unset = ""
+  )
+  if (nzchar(env)) {
+    parts <- trimws(strsplit(env, ",", fixed = TRUE)[[1]])
+    return(parts[nzchar(parts)])
+  }
+  switch(
+    provider,
+    gemini = c("gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"),
+    openai = c("gpt-4.1", "gpt-4o", "gpt-4o-mini"),
+    anthropic = c("claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5"),
+    character(0)
+  )
+}
+
 # --- System prompt -----------------------------------------------------------
 
 # Markdown context files, assembled in order into the system prompt.
@@ -338,6 +360,72 @@ tahoe_agent_byok_credential <- function(provider, api_key, model = "") {
     msg <- gsub(secret, "<redacted-key>", msg, fixed = TRUE)
   }
   msg
+}
+
+# Map a raw provider/client error to a short, user-safe message. The known
+# secret is redacted first, then common failure modes (bad key, quota / rate
+# limit, model not found or unsupported, overloaded) are matched to friendly
+# text; anything else falls back to a trimmed raw message. Used so a turn-time
+# error surfaces as a chat message instead of crashing the Shiny session.
+.tahoe_agent_friendly_error <- function(msg, secret = "") {
+  raw <- .tahoe_agent_redact(msg, secret)
+  low <- tolower(raw)
+  has <- function(...) {
+    any(vapply(c(...), function(p) grepl(p, low, fixed = TRUE), logical(1)))
+  }
+  if (
+    has(
+      "api key not valid",
+      "api_key_invalid",
+      "invalid api key",
+      "invalid authentication",
+      "unauthenticated",
+      "unauthorized",
+      "permission_denied",
+      "permission denied",
+      "401",
+      "403"
+    )
+  ) {
+    "Your API key was rejected or lacks access to this model. Check the key and try again."
+  } else if (
+    has(
+      "resource_exhausted",
+      "rate limit",
+      "rate_limit",
+      "quota",
+      "insufficient_quota",
+      "429",
+      "too many requests"
+    )
+  ) {
+    "Rate limit or quota reached for this key. Wait a moment, or try a different model."
+  } else if (
+    has(
+      "overloaded",
+      "unavailable",
+      "503",
+      "try again later",
+      "high demand"
+    )
+  ) {
+    "The model is busy or temporarily unavailable. Try again shortly, or switch models."
+  } else if (
+    has(
+      "not found",
+      "model_not_found",
+      "does not exist",
+      "unknown model",
+      "invalid model",
+      "404"
+    )
+  ) {
+    "That model isn't available for your account. Pick another model or type a valid id."
+  } else if (has("invalid_argument", "unsupported", "400", "bad request")) {
+    "The request was rejected (often an unsupported model or parameter). Try a different model."
+  } else {
+    paste0("The assistant hit an error: ", substr(raw, 1, 300))
+  }
 }
 
 #' Build a per-session ellmer Chat for a `credential`, with the Tahoe tool suite
