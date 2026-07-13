@@ -1,7 +1,8 @@
 # Tests for the LLM assistant's hermetic surface: config gating, the system
-# prompt assembly, the tool backing functions (against fixtures), and the chat
-# module server driven with a stub client. No network, no Vertex credentials --
-# setup.R sets TAHOE_AGENT_DISABLE=1 so the live path is never taken.
+# prompt assembly, provider/backend selection, the tool backing functions
+# (against fixtures), and the chat module server driven with a stub client. No
+# network, no credentials -- setup.R sets TAHOE_AGENT_DISABLE=1 so the live path
+# is never taken; individual tests toggle env vars via withr::local_envvar.
 
 test_that("agent config accessors resolve env with sane defaults", {
   withr::local_envvar(
@@ -10,6 +11,7 @@ test_that("agent config accessors resolve env with sane defaults", {
     TAHOE_AGENT_TEMPERATURE = NA,
     GEMINI_TEMPERATURE = NA,
     TAHOE_VERTEX_LOCATION = NA,
+    VERTEX_LOCATION = NA,
     GOOGLE_CLOUD_LOCATION = NA,
     GOOGLE_CLOUD_REGION = NA
   )
@@ -25,19 +27,47 @@ test_that("agent config accessors resolve env with sane defaults", {
   expect_equal(tahoe_agent_temperature(), 0)
 })
 
-test_that("agent is unavailable without configuration and when disabled", {
+test_that("gating splits the shared default from BYOK and honours the kill switch", {
   withr::local_envvar(
     TAHOE_AGENT_DISABLE = NA,
     TAHOE_VERTEX_PROJECT = NA,
+    VERTEX_PROJECT_ID = NA,
     GOOGLE_CLOUD_PROJECT = NA,
-    GCLOUD_PROJECT = NA
+    GCLOUD_PROJECT = NA,
+    TAHOE_AGENT_BYOK = NA,
+    TAHOE_AGENT_BYOK_PROVIDERS = NA
   )
-  # No project id -> off, regardless of whether the packages are installed.
-  expect_false(tahoe_agent_available())
+  if (tahoe_agent_packages_ok()) {
+    # No project id -> shared default off, but BYOK is on by default, so the
+    # page is still enabled.
+    expect_false(tahoe_agent_default_available())
+    expect_false(tahoe_agent_available()) # back-compat alias == default path
+    expect_true(tahoe_agent_byok_enabled())
+    expect_true(tahoe_agent_enabled())
+  } else {
+    # Packages absent (e.g. CI): nothing is enabled.
+    expect_false(tahoe_agent_enabled())
+  }
 
-  withr::local_envvar(TAHOE_VERTEX_PROJECT = "proj", TAHOE_AGENT_DISABLE = "1")
-  # Kill switch wins even with a project configured.
-  expect_false(tahoe_agent_available())
+  # The kill switch wins over everything.
+  withr::local_envvar(TAHOE_AGENT_DISABLE = "1", TAHOE_VERTEX_PROJECT = "proj")
+  expect_false(tahoe_agent_default_available())
+  expect_false(tahoe_agent_byok_enabled())
+  expect_false(tahoe_agent_enabled())
+})
+
+test_that("BYOK can be turned off and its providers are whitelisted", {
+  skip_if_not(tahoe_agent_packages_ok())
+  withr::local_envvar(TAHOE_AGENT_DISABLE = NA, TAHOE_AGENT_BYOK = "0")
+  expect_false(tahoe_agent_byok_enabled())
+
+  withr::local_envvar(
+    TAHOE_AGENT_BYOK = "1",
+    TAHOE_AGENT_BYOK_PROVIDERS = "gemini, bogus, anthropic"
+  )
+  expect_true(tahoe_agent_byok_enabled())
+  # Unknown names are dropped; order follows the request.
+  expect_equal(tahoe_agent_byok_providers(), c("gemini", "anthropic"))
 })
 
 test_that("system prompt assembles the context files and key facts", {
@@ -68,6 +98,61 @@ test_that("tool suite is complete and every spec converts to an ellmer tool", {
   }
 })
 
+test_that("tahoe_agent_client selects the backend and passes key + model", {
+  skip_if_not_installed("ellmer") # tahoe_agent_client uses ellmer::params()
+  seen <- new.env()
+  fake_backends <- list(
+    gemini = function(system_prompt, params, echo, model = "", api_key = "") {
+      seen$provider <- "gemini"
+      seen$model <- model
+      seen$api_key <- api_key
+      seen$system_prompt <- system_prompt
+      list(register_tool = function(...) invisible(NULL))
+    }
+  )
+  cred <- tahoe_agent_byok_credential(
+    "gemini",
+    "sk-test-123",
+    model = "gemini-x"
+  )
+  cl <- tahoe_agent_client(
+    credential = cred,
+    system_prompt = "SP",
+    tools = list(),
+    backends = fake_backends
+  )
+  expect_false(is.null(cl))
+  expect_equal(seen$provider, "gemini")
+  expect_equal(seen$api_key, "sk-test-123")
+  expect_equal(seen$model, "gemini-x")
+  expect_equal(seen$system_prompt, "SP")
+})
+
+test_that("tahoe_agent_client rejects a missing key and an unknown provider", {
+  fake_backends <- list(
+    gemini = function(...) list(register_tool = function(...) invisible(NULL))
+  )
+  # Empty key errors before any provider call (no ellmer needed).
+  expect_error(
+    tahoe_agent_client(
+      credential = tahoe_agent_byok_credential("gemini", ""),
+      tools = list(),
+      backends = fake_backends
+    ),
+    "API key"
+  )
+  # Unknown provider is rejected -- a hostile source value can never reach a
+  # backend that is not in the registry.
+  expect_error(
+    tahoe_agent_client(
+      credential = list(kind = "byok", provider = "evil", api_key = "x"),
+      tools = list(),
+      backends = fake_backends
+    ),
+    "unknown chat provider"
+  )
+})
+
 test_that("tool backing functions return capped, well-shaped results", {
   tools <- tahoe_agent_tools()
   by <- stats::setNames(tools, vapply(tools, `[[`, "", "name"))
@@ -94,15 +179,20 @@ test_that("tool backing functions return capped, well-shaped results", {
   expect_type(r$estimated_cells, "integer")
 })
 
-test_that("chat_agent_server streams a user turn to append with a stub client", {
+test_that("chat_agent_server streams a shared-source turn to append", {
   record <- new.env()
+  record$creds <- list()
   record$sent <- character()
   record$appended <- list()
-  stub_factory <- function() {
-    list(stream_async = function(text) {
-      record$sent <- c(record$sent, text)
-      paste0("REPLY:", text)
-    })
+  stub_factory <- function(credential) {
+    record$creds[[length(record$creds) + 1L]] <- credential
+    list(
+      on_tool_request = function(cb) invisible(NULL),
+      stream_async = function(text) {
+        record$sent <- c(record$sent, text)
+        paste0("REPLY:", text)
+      }
+    )
   }
   recorder <- function(response) {
     record$appended[[length(record$appended) + 1L]] <- response
@@ -114,6 +204,9 @@ test_that("chat_agent_server streams a user turn to append with a stub client", 
       chat_agent_server(id, client_factory = stub_factory, append = recorder)
     },
     {
+      session$setInputs(source = "shared") # builds the client via factory()
+      expect_equal(record$creds[[1]]$kind, "vertex")
+
       session$setInputs(chat_user_input = "How many drugs are there?")
       expect_true("How many drugs are there?" %in% record$sent)
       expect_gt(length(record$appended), 0)
@@ -122,6 +215,64 @@ test_that("chat_agent_server streams a user turn to append with a stub client", 
       # Blank input is ignored (no extra turn).
       session$setInputs(chat_user_input = "   ")
       expect_equal(n_turns(), 1L)
+    }
+  )
+})
+
+test_that("chat_agent_server BYOK: connect carries the key, forget clears it", {
+  record <- new.env()
+  record$creds <- list()
+  record$sent <- character()
+  record$appended <- list()
+  stub_factory <- function(credential) {
+    record$creds[[length(record$creds) + 1L]] <- credential
+    list(
+      on_tool_request = function(cb) invisible(NULL),
+      stream_async = function(text) {
+        record$sent <- c(record$sent, text)
+        paste0("REPLY:", text)
+      }
+    )
+  }
+  recorder <- function(response) {
+    record$appended[[length(record$appended) + 1L]] <- response
+    NULL
+  }
+
+  testServer(
+    function(id) {
+      chat_agent_server(id, client_factory = stub_factory, append = recorder)
+    },
+    {
+      # Selecting a BYOK provider does NOT build a client yet.
+      session$setInputs(source = "gemini")
+      session$setInputs(chat_user_input = "hi")
+      expect_equal(n_turns(), 0L)
+      last <- record$appended[[length(record$appended)]]
+      expect_true(grepl("connect", last, ignore.case = TRUE))
+
+      # Connect a key -> client is built and the credential carries the key.
+      session$setInputs(api_key = "sk-secret-XYZ", model = "")
+      session$setInputs(connect = 1)
+      expect_false(is.null(client()))
+      cred <- record$creds[[length(record$creds)]]
+      expect_equal(cred$kind, "byok")
+      expect_equal(cred$provider, "gemini")
+      expect_equal(cred$api_key, "sk-secret-XYZ")
+
+      # The key must never surface in the status shown to the user.
+      st <- status()
+      expect_true(isTRUE(st$ok))
+      expect_false(grepl("sk-secret-XYZ", st$msg, fixed = TRUE))
+
+      # Now a turn streams through the connected client.
+      session$setInputs(chat_user_input = "hello")
+      expect_true("hello" %in% record$sent)
+      expect_equal(n_turns(), 1L)
+
+      # Forget drops the client (no more chatting until reconnect).
+      session$setInputs(forget = 1)
+      expect_true(is.null(client()))
     }
   )
 })
