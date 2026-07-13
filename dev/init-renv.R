@@ -30,7 +30,13 @@ runtime <- c(
   "plotly",
   "DBI",
   "duckdb",
-  "DiagrammeR"
+  "DiagrammeR",
+  # AI assistant (Chat tab). Optional at runtime -- the tab is gated and the app
+  # loads fine without these -- but a deployment that enables it needs them in
+  # the lockfile. gargle (Vertex ADC auth) and coro (streaming) come in as
+  # transitive deps of ellmer.
+  "ellmer",
+  "shinychat"
 )
 
 # Tooling used by dev scripts and the test suite (captured so a restored library

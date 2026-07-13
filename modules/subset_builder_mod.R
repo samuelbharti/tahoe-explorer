@@ -147,22 +147,10 @@ subset_builder_ui <- function(id) {
   )
 }
 
-# Public obs parquet on HuggingFace — the source the generated code reads from,
-# so the snippets run without pre-downloading anything.
-.subset_obs_hf <- sprintf(
-  "hf://datasets/%s@%s/metadata/obs_metadata.parquet",
-  .tahoe_dataset_repo,
-  .tahoe_dataset_revision
-)
-
-# Approximate compressed bytes per cell in the obs parquet (~2.29 GB / 100.6M
-# cells), used for the subset size estimate.
-.subset_obs_bytes_per_cell <- 23
-
-# Format an integer for a value box, with an em dash for NA / unknown.
-.subset_fmt <- function(x) {
-  if (length(x) != 1 || is.na(x)) "—" else format(x, big.mark = ",")
-}
+# The subset-recipe constants and helpers (.subset_obs_hf,
+# .subset_obs_bytes_per_cell, .subset_fmt, .subset_sql_vec, .subset_py_list,
+# .subset_py_num) and the recipe builder (tahoe_subset_recipe) now live in
+# R/subset_recipe.R, shared with the Chat assistant's build_subset_recipe tool.
 
 # Compact format for large counts (e.g. 28.5M) so value boxes don't wrap.
 .subset_fmt_big <- function(x) {
@@ -170,30 +158,6 @@ subset_builder_ui <- function(id) {
     return("—")
   }
   scales::label_number(accuracy = 0.1, scale_cut = scales::cut_short_scale())(x)
-}
-
-# Render a character vector as a single-quoted SQL IN list, e.g. ('a', 'b').
-.subset_sql_vec <- function(x) {
-  vals <- paste(
-    vapply(
-      x,
-      function(v) paste0("'", gsub("'", "''", v, fixed = TRUE), "'"),
-      character(1)
-    ),
-    collapse = ", "
-  )
-  paste0("(", vals, ")")
-}
-
-# Render a character vector as a Python list literal, e.g. ["a", "b"].
-.subset_py_list <- function(x) {
-  esc <- gsub('"', '\\\\"', x, perl = TRUE)
-  paste0("[", paste(sprintf('"%s"', esc), collapse = ", "), "]")
-}
-
-# Render a numeric vector as a Python list literal, e.g. [0.05, 5].
-.subset_py_num <- function(x) {
-  paste0("[", paste(format(x, trim = TRUE), collapse = ", "), "]")
 }
 
 subset_builder_server <- function(id) {
@@ -265,29 +229,24 @@ subset_builder_server <- function(id) {
     })
     sel_plates <- reactive(input$plates %||% character())
 
+    # The current selection across the six subset dimensions, in the plain-list
+    # shape the shared recipe logic (R/subset_recipe.R) expects.
+    selection <- reactive(
+      list(
+        organs = sel_organs(),
+        drivers = sel_drivers(),
+        cell_lines = sel_cell_lines(),
+        drugs = sel_drugs(),
+        doses = sel_doses(),
+        plates = sel_plates()
+      )
+    )
+
     # Cell lines implied by the tissue + driver + explicit-cell-line filters,
     # restricted to the assayed lines that actually appear in the data.
-    matched_cell_names <- reactive({
-      g <- grid()
-      names_out <- unique(g$cell_name)
-      if (length(sel_organs()) > 0 && "organ" %in% names(g)) {
-        names_out <- intersect(
-          names_out,
-          unique(g$cell_name[g$organ %in% sel_organs()])
-        )
-      }
-      if (length(sel_drivers()) > 0) {
-        dl <- driver_lines()
-        if (all(c("cell_name", "Driver_Gene_Symbol") %in% names(dl))) {
-          hit <- unique(dl$cell_name[dl$Driver_Gene_Symbol %in% sel_drivers()])
-          names_out <- intersect(names_out, hit)
-        }
-      }
-      if (length(sel_cell_lines()) > 0) {
-        names_out <- intersect(names_out, sel_cell_lines())
-      }
-      names_out
-    })
+    matched_cell_names <- reactive(
+      tahoe_subset_matched_lines(selection(), grid(), driver_lines())
+    )
 
     # Keep the cell-line picker in sync with the tissue / driver filters.
     observeEvent(
@@ -456,124 +415,18 @@ subset_builder_server <- function(id) {
       )
     })
 
-    # Copy-paste recipe reproducing the selection straight from HuggingFace. The
-    # tissue / driver filters are resolved to their concrete cell_name set.
-    recipe <- reactive({
-      drugs <- sel_drugs()
-      doses <- sel_doses()
-      plates <- sel_plates()
-      # Only constrain cell lines when the resolved set is a strict subset.
-      all_lines <- unique(grid()$cell_name)
-      lines <- matched_cell_names()
-      constrain_lines <- length(lines) > 0 &&
-        length(lines) < length(all_lines)
-
-      if (
-        length(drugs) == 0 &&
-          length(doses) == 0 &&
-          length(plates) == 0 &&
-          !constrain_lines
-      ) {
-        return(paste(
-          "No filters selected: this recipe would return the full dataset.",
-          "Pick a tissue, driver, cell line, drug, dose, or plate to build a",
-          "reproducible subset predicate."
-        ))
-      }
-
-      r_where <- character()
-      py_where <- character()
-      if (length(drugs) > 0) {
-        r_where <- c(r_where, sprintf("drug IN %s", .subset_sql_vec(drugs)))
-        py_where <- c(
-          py_where,
-          sprintf('df["drug"].isin(%s)', .subset_py_list(drugs))
-        )
-      }
-      if (constrain_lines) {
-        r_where <- c(
-          r_where,
-          sprintf("cell_name IN %s", .subset_sql_vec(lines))
-        )
-        py_where <- c(
-          py_where,
-          sprintf('df["cell_name"].isin(%s)', .subset_py_list(lines))
-        )
-      }
-      if (length(plates) > 0) {
-        r_where <- c(r_where, sprintf("plate IN %s", .subset_sql_vec(plates)))
-        py_where <- c(
-          py_where,
-          sprintf('df["plate"].isin(%s)', .subset_py_list(plates))
-        )
-      }
-      if (length(doses) > 0) {
-        r_where <- c(
-          r_where,
-          sprintf(
-            paste0(
-              "TRY_CAST(regexp_extract(drugname_drugconc, ",
-              "',\\s*([0-9.eE+-]+)\\s*,', 1) AS DOUBLE) IN (%s)"
-            ),
-            paste(format(doses, trim = TRUE), collapse = ", ")
-          )
-        )
-        py_where <- c(
-          py_where,
-          sprintf(
-            paste0(
-              'df["drugname_drugconc"].str.extract(',
-              'r",\\s*([0-9.eE+-]+)\\s*,")[0].astype(float).isin(%s)'
-            ),
-            .subset_py_num(doses)
-          )
-        )
-      }
-
-      r_predicate <- paste(r_where, collapse = "\n    AND ")
-      py_predicate <- paste(py_where, collapse = "\n    & ")
-
-      est <- estimate()
-      header <- paste(
-        "# ── Estimated subset ─────────────────────────────────────────",
-        sprintf(
-          "# ~%s cells across %s samples · ~%s MB of obs metadata to scan.",
-          .subset_fmt(est$cells),
-          .subset_fmt(est$samples),
-          .subset_fmt(est$obs_mb)
-        ),
-        "# The expression matrix is downloaded separately and is larger.",
-        sprintf("# Source: %s", .subset_obs_hf),
-        sep = "\n"
-      )
-      r_snippet <- paste(
-        "## R (duckdb) — pull the subset's cell-level metadata ---------",
-        "library(duckdb); library(DBI)",
-        "con <- dbConnect(duckdb())",
-        'dbExecute(con, "INSTALL httpfs; LOAD httpfs;")',
-        "obs <- dbGetQuery(con, \"",
-        "  SELECT *",
-        sprintf("  FROM read_parquet('%s')", .subset_obs_hf),
-        sprintf("  WHERE %s", r_predicate),
-        "\")",
-        "dbDisconnect(con, shutdown = TRUE)",
-        sep = "\n"
-      )
-      py_snippet <- paste(
-        "## Python (scanpy / AnnData) — subset cells for analysis ------",
-        "import pandas as pd, scanpy as sc",
-        sprintf('obs = pd.read_parquet(\n    "%s"\n)', .subset_obs_hf),
-        sprintf("mask = (\n    %s\n)", gsub("df\\[", "obs[", py_predicate)),
-        'cells = obs.loc[mask, "BARCODE_SUB_LIB_ID"]',
-        "",
-        "# Point `adata` at the Tahoe-100M expression AnnData, then keep",
-        "# only these cells (obs_names are the BARCODE_SUB_LIB_ID values):",
-        '# adata = sc.read_h5ad("<tahoe_expression.h5ad>", backed="r")',
-        "# adata = adata[adata.obs_names.isin(cells)].to_memory()",
-        sep = "\n"
-      )
-      paste(header, "", r_snippet, "", py_snippet, sep = "\n")
-    })
+    # Copy-paste recipe reproducing the selection straight from HuggingFace,
+    # built by the shared recipe logic in R/subset_recipe.R (also used by the
+    # Chat assistant's build_subset_recipe tool). The tissue / driver filters are
+    # resolved to their concrete cell_name set inside tahoe_subset_recipe().
+    recipe <- reactive(
+      tahoe_subset_recipe(
+        selection(),
+        grid(),
+        driver_lines(),
+        tahoe_sample()
+      )$recipe
+    )
 
     subset_export_server(
       "export",
