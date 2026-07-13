@@ -1,7 +1,7 @@
 # Pin the base by R version for reproducibility; keep it aligned with the R
 # version recorded in renv.lock (bump both together). Swap to the nearest
 # available rocker/shiny tag if this exact patch is not published.
-FROM rocker/shiny:4.5.3
+FROM rocker/shiny:4.6.1
 
 ARG CRAN_MIRROR=https://cloud.r-project.org
 ENV CRAN_MIRROR=${CRAN_MIRROR}
@@ -27,8 +27,7 @@ COPY . /home/app
 # DiagrammeR/..., so without a restore the app would only fail later at runtime
 # (library(duckdb) errors and the container exits). Generate the lock first with
 # dev/init-renv.R and commit it.
-RUN Rscript -e "if (!requireNamespace('renv', quietly = TRUE)) install.packages('renv', repos = Sys.getenv('CRAN_MIRROR', 'https://cloud.r-project.org')); if (!file.exists('/home/app/renv.lock')) stop('No renv.lock found - run dev/init-renv.R and commit renv.lock before building.'); options(renv.config.pak.enabled = TRUE); restore_res <- try(renv::restore(prompt = FALSE, lockfile = '/home/app/renv.lock'), silent = TRUE); if (inherits(restore_res, 'try-error')) { message('pak-enabled restore failed, retrying with standard renv restore.'); options(renv.config.pak.enabled = FALSE); renv::restore(prompt = FALSE, lockfile = '/home/app/renv.lock') }
-"
+RUN Rscript -e "if (!requireNamespace('renv', quietly = TRUE)) install.packages('renv', repos = Sys.getenv('CRAN_MIRROR', 'https://cloud.r-project.org')); if (!file.exists('/home/app/renv.lock')) stop('No renv.lock found - run dev/init-renv.R and commit renv.lock before building.'); options(renv.config.pak.enabled = TRUE); restore_res <- try(renv::restore(prompt = FALSE, lockfile = '/home/app/renv.lock'), silent = TRUE); if (inherits(restore_res, 'try-error')) { message('pak-enabled restore failed, retrying with standard renv restore.'); options(renv.config.pak.enabled = FALSE); renv::restore(prompt = FALSE, lockfile = '/home/app/renv.lock') }"
 
 EXPOSE 3838
 
