@@ -390,11 +390,23 @@ tahoe_agent_byok_credential <- function(provider, api_key, model = "") {
     "Your API key was rejected or lacks access to this model. Check the key and try again."
   } else if (
     has(
+      "credit",
+      "prepay",
+      "billing",
+      "depleted",
+      "insufficient_quota",
+      "insufficient funds",
+      "payment required",
+      "402"
+    )
+  ) {
+    "This key's billing or prepaid credits are exhausted. Top up billing, or switch to a different key or model."
+  } else if (
+    has(
       "resource_exhausted",
       "rate limit",
       "rate_limit",
       "quota",
-      "insufficient_quota",
       "429",
       "too many requests"
     )

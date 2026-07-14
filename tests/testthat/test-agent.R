@@ -289,6 +289,14 @@ test_that("friendly error mapper classifies failures and redacts the key", {
     "Rate limit or quota",
     ignore.case = TRUE
   )
+  # Depleted billing / prepaid credits map to the billing message, not the
+  # transient rate-limit one (waiting would not help) -- even though the
+  # provider returns it as a 429 (the real Gemini/AI Studio error).
+  expect_match(
+    f("HTTP 429 Too Many Requests. Your prepayment credits are depleted."),
+    "billing or prepaid credits",
+    ignore.case = TRUE
+  )
   expect_match(f("503 model is overloaded"), "busy", ignore.case = TRUE)
   expect_match(
     f("404 model not found: bad"),
