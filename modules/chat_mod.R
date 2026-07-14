@@ -157,8 +157,18 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
       return(invisible(NULL))
     }
 
+    # Session-aware tools that read and drive the Subset builder (found lazily via
+    # session$userData; see R/agent_bridge.R). Appended to the base data-layer
+    # tool suite. `session` here is the chat session -- used only to LOOK UP the
+    # bridge; the builder side owns the actual input writes.
+    state_tools <- tahoe_subset_state_tools(session)
     factory <- if (is.null(client_factory)) {
-      function(credential) tahoe_agent_client(credential = credential)
+      function(credential) {
+        tahoe_agent_client(
+          credential = credential,
+          tools = c(tahoe_agent_tools(), state_tools)
+        )
+      }
     } else {
       client_factory
     }

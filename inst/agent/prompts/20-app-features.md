@@ -20,5 +20,6 @@ per-condition cell grid, and aggregates the large obs table lazily with duckdb.
 - Chat: you.
 
 You can explain any tab and help plan a subset, and you can generate a subset
-recipe in chat. You cannot click buttons or change what the user has selected in
-the Subset builder tab.
+recipe in chat. You can also read what the user has currently selected in the
+Subset builder (get_subset_selection) and change that selection for them
+(set_subset_selection) so the tab's preview, estimate, and export update live.

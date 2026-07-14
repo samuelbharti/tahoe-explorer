@@ -435,6 +435,179 @@ subset_builder_server <- function(id) {
       recipe = recipe
     )
 
+    # --- Chat-assistant bridge -------------------------------------------------
+    # Expose the live selection (read) and a validated setter (drive) so the Chat
+    # assistant's get_subset_selection / set_subset_selection tools can inspect
+    # and change what the user has picked here. Registered into session$userData
+    # (shared across module sessions); see R/agent_bridge.R. These closures are
+    # called from the chat module's async tool call, so every reactive read is
+    # isolated and every input write targets THIS module's session.
+
+    # Estimated cells/samples for an arbitrary selection list, via the shared
+    # recipe logic (the same numbers the Export card shows). NA on any failure.
+    bridge_counts <- function(sel) {
+      r <- tryCatch(
+        isolate(tahoe_subset_recipe(
+          sel,
+          grid(),
+          driver_lines(),
+          tahoe_sample()
+        )),
+        error = function(e) NULL
+      )
+      list(
+        cells = if (is.null(r)) NA_integer_ else r$cells,
+        samples = if (is.null(r)) NA_integer_ else r$samples
+      )
+    }
+
+    bridge_get <- function() {
+      sel <- isolate(selection())
+      cnt <- bridge_counts(sel)
+      list(
+        available = TRUE,
+        selection = sel,
+        estimated_cells = cnt$cells,
+        estimated_samples = cnt$samples
+      )
+    }
+
+    # Apply a partial selection request: NULL for a dimension leaves it untouched,
+    # any vector (including empty) replaces it. Values outside the dataset are
+    # dropped and reported in `ignored`, so the LLM can correct itself.
+    bridge_set <- function(request) {
+      g <- isolate(tryCatch(grid(), error = function(e) NULL))
+      dl <- isolate(tryCatch(driver_lines(), error = function(e) {
+        tahoe_cell_line()
+      }))
+      cur <- isolate(selection())
+      if (is.null(g)) {
+        g <- data.frame()
+      }
+      assayed <- if ("cell_name" %in% names(g)) {
+        unique(g$cell_name)
+      } else {
+        character()
+      }
+      samples <- tryCatch(tahoe_sample(), error = function(e) NULL)
+
+      # Valid value domain per dimension, mirroring the UI's choice construction.
+      dom <- list(
+        organs = .subset_choices(g, "organ"),
+        drivers = if (
+          all(c("cell_name", "Driver_Gene_Symbol") %in% names(dl))
+        ) {
+          .subset_choices(
+            dl[dl$cell_name %in% assayed, , drop = FALSE],
+            "Driver_Gene_Symbol"
+          )
+        } else {
+          character()
+        },
+        cell_lines = sort(assayed),
+        drugs = .subset_choices(g, "drug"),
+        doses = sort(unique(g$conc[!is.na(g$conc)])),
+        plates = if (!is.null(samples) && "plate" %in% names(samples)) {
+          sort(unique(as.character(samples$plate)))
+        } else {
+          character()
+        }
+      )
+
+      applied <- cur
+      ignored <- list()
+      # Keep only the requested values that exist in the dimension's domain;
+      # record the rest. Returns NULL (leave untouched) when not provided.
+      validate_dim <- function(name, numeric = FALSE) {
+        vals <- request[[name]]
+        if (is.null(vals)) {
+          return(NULL)
+        }
+        vals <- if (numeric) {
+          suppressWarnings(as.numeric(unlist(vals)))
+        } else {
+          as.character(unlist(vals))
+        }
+        vals <- vals[!is.na(vals)]
+        good <- unique(vals[vals %in% dom[[name]]])
+        bad <- unique(vals[!(vals %in% dom[[name]])])
+        if (length(bad) > 0) {
+          ignored[[name]] <<- as.character(bad)
+        }
+        good
+      }
+
+      for (nm in c("organs", "drivers", "drugs", "doses", "plates")) {
+        good <- validate_dim(nm, numeric = identical(nm, "doses"))
+        if (!is.null(good)) {
+          applied[[nm]] <- good
+        }
+      }
+
+      # Cell lines are further constrained by the RESULTING tissue / driver
+      # filters (as the UI narrows them). Compute that choice set, keep only the
+      # requested lines within it, and report any that fall outside.
+      cl_req <- validate_dim("cell_lines")
+      cl_choices <- sort(assayed)
+      if (length(applied$organs) > 0 && "organ" %in% names(g)) {
+        cl_choices <- sort(unique(g$cell_name[g$organ %in% applied$organs]))
+      }
+      if (
+        length(applied$drivers) > 0 &&
+          all(c("cell_name", "Driver_Gene_Symbol") %in% names(dl))
+      ) {
+        hit <- unique(dl$cell_name[dl$Driver_Gene_Symbol %in% applied$drivers])
+        cl_choices <- intersect(cl_choices, hit)
+      }
+      if (!is.null(cl_req)) {
+        dropped <- setdiff(cl_req, cl_choices)
+        if (length(dropped) > 0) {
+          ignored$cell_lines <- unique(c(ignored$cell_lines, dropped))
+        }
+        applied$cell_lines <- intersect(cl_req, cl_choices)
+      } else {
+        # Not requested, but the filters above may have narrowed the valid set;
+        # keep the current lines that still qualify (matches the sync observer).
+        applied$cell_lines <- intersect(applied$cell_lines, cl_choices)
+      }
+
+      # Push each dimension to its input. Filters first, then cell_lines with its
+      # recomputed choice set, so the tissue/driver sync observer -- when it fires
+      # on the organ/driver change -- re-applies the SAME narrowed set idempotently.
+      updateSelectizeInput(session, "organs", selected = applied$organs)
+      updateSelectizeInput(session, "drivers", selected = applied$drivers)
+      updateSelectizeInput(session, "drugs", selected = applied$drugs)
+      updateSelectizeInput(
+        session,
+        "doses",
+        selected = as.character(applied$doses)
+      )
+      updateSelectizeInput(session, "plates", selected = applied$plates)
+      updateSelectizeInput(
+        session,
+        "cell_lines",
+        choices = cl_choices,
+        selected = applied$cell_lines
+      )
+
+      cnt <- bridge_counts(applied)
+      out <- list(
+        applied = TRUE,
+        selection = applied,
+        estimated_cells = cnt$cells,
+        estimated_samples = cnt$samples
+      )
+      if (length(ignored) > 0) {
+        out$ignored <- ignored
+      }
+      out
+    }
+
+    tahoe_register_subset_bridge(
+      session,
+      list(get = bridge_get, set = bridge_set)
+    )
+
     list(matched_samples = matched_samples, grid_filtered = grid_filtered)
   })
 }
