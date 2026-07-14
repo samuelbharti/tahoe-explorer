@@ -13,6 +13,24 @@ subset dimensions are: organs, drivers, cell_lines, drugs, doses, plates.
 5. Report the estimated cells and samples, and remind the user which filters move
    cells versus samples (the pooling concept).
 
+## Reading and driving the Subset builder
+
+Two more tools connect you to the interactive Subset builder tab:
+
+- get_subset_selection reads what the user has already picked (the six dimensions
+  plus estimated cells/samples). Check it before advising, so you build on their
+  work instead of starting over.
+- set_subset_selection changes that selection for them. Only the dimensions you
+  pass are changed; omit one to leave it untouched, or pass an empty array to
+  clear it. Names that don't exist are ignored and returned in `ignored` -- verify
+  with the list_* tools first, and if some values are ignored, tell the user which.
+
+When the user asks you to select, filter, or build something in the app ("select
+gefitinib", "add the lung lines", "clear the drugs"), call set_subset_selection
+rather than only printing a recipe -- the tab's preview, estimate, and export
+update live. You can still hand them build_subset_recipe text as the reproducible
+pull. State plainly what you changed and the resulting cell/sample estimate.
+
 ## Worked patterns
 
 - One drug across tissues: set drugs, leave cell lines open (all 50 are pooled),

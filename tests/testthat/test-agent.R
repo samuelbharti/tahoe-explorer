@@ -96,6 +96,74 @@ test_that("tool suite is complete and every spec converts to an ellmer tool", {
   for (spec in tools) {
     expect_no_error(.tahoe_agent_ellmer_tool(spec))
   }
+  # The session-aware Subset builder tools convert too (session unused here).
+  for (spec in tahoe_subset_state_tools(session = NULL)) {
+    expect_no_error(.tahoe_agent_ellmer_tool(spec))
+  }
+})
+
+test_that("subset state tools degrade gracefully and route through a bridge", {
+  tools <- tahoe_subset_state_tools(session = NULL)
+  nm <- vapply(tools, `[[`, "", "name")
+  expect_equal(nm, c("get_subset_selection", "set_subset_selection"))
+  by <- stats::setNames(tools, nm)
+
+  # No session/bridge -> a friendly "not loaded" result, never an error.
+  expect_false(by[["get_subset_selection"]]$fun()$available)
+  expect_false(by[["set_subset_selection"]]$fun(drugs = "X")$applied)
+
+  # With a fake bridge in a fake session's userData, calls route straight through
+  # and omitted dimensions arrive as NULL (leave-untouched semantics).
+  seen <- new.env()
+  fake_bridge <- list(
+    get = function() list(available = TRUE, selection = list(drugs = "D1")),
+    set = function(request) {
+      seen$request <- request
+      list(applied = TRUE, selection = list(drugs = request$drugs))
+    }
+  )
+  fake_session <- list(userData = new.env())
+  fake_session$userData[[.tahoe_subset_bridge_key]] <- fake_bridge
+  routed <- stats::setNames(tahoe_subset_state_tools(fake_session), nm)
+
+  expect_equal(routed[["get_subset_selection"]]$fun()$selection$drugs, "D1")
+  res <- routed[["set_subset_selection"]]$fun(drugs = c("D1", "D2"))
+  expect_true(res$applied)
+  expect_equal(seen$request$drugs, c("D1", "D2"))
+  expect_null(seen$request$organs)
+})
+
+test_that("subset builder bridge reads, validates, and drives the selection", {
+  drug <- as.character(tahoe_drug()$drug[[1]])
+  testServer(
+    function(id) subset_builder_server(id),
+    {
+      session$flushReact()
+      bridge <- session$userData[[.tahoe_subset_bridge_key]]
+      expect_false(is.null(bridge))
+
+      # get() reflects the current inputs and reports an estimate.
+      session$setInputs(drugs = drug)
+      session$flushReact()
+      st <- bridge$get()
+      expect_true(st$available)
+      expect_true(drug %in% st$selection$drugs)
+      expect_type(st$estimated_cells, "integer")
+
+      # set() validates: a real drug sticks, a bogus one is ignored (not errored),
+      # and the applied selection + estimate come back.
+      res <- bridge$set(list(drugs = c(drug, "NoSuchDrug-999")))
+      expect_true(res$applied)
+      expect_true(drug %in% res$selection$drugs)
+      expect_false("NoSuchDrug-999" %in% res$selection$drugs)
+      expect_true("NoSuchDrug-999" %in% res$ignored$drugs)
+      expect_type(res$estimated_cells, "integer")
+
+      # An empty vector clears a dimension; NULL leaves others untouched.
+      res2 <- bridge$set(list(drugs = character()))
+      expect_length(res2$selection$drugs, 0)
+    }
+  )
 })
 
 test_that("tahoe_agent_client selects the backend and passes key + model", {
