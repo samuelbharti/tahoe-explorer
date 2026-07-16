@@ -178,6 +178,40 @@ tahoe_agent_byok_providers <- function() {
   )
 }
 
+# ellmer's live model-listing function for a BYOK provider (hits the provider's
+# /models endpoint, scoped to the supplied key). NULL for an unknown provider.
+# Looked up only on the enabled path, so ellmer is present.
+.tahoe_agent_lister <- function(provider) {
+  switch(
+    provider,
+    gemini = ellmer::models_google_gemini,
+    openai = ellmer::models_openai,
+    anthropic = ellmer::models_anthropic,
+    NULL
+  )
+}
+
+#' Fetch the CURRENT model ids a BYOK key can access, so the picker never offers
+#' a stale or inaccessible model. Returns a character vector, or NULL on any
+#' failure (unknown provider, blank/bad key, offline, unexpected shape) so the
+#' caller falls back to the curated suggestions. The provider endpoints are
+#' lightweight and the call is user-initiated (a button press).
+.tahoe_agent_fetch_models <- function(provider, api_key) {
+  fn <- .tahoe_agent_lister(provider)
+  if (is.null(fn) || !nzchar(api_key %||% "")) {
+    return(NULL)
+  }
+  df <- tryCatch(fn(api_key = api_key), error = function(e) NULL)
+  if (is.null(df) || !is.data.frame(df) || !"id" %in% names(df)) {
+    return(NULL)
+  }
+  # ellmer keeps the endpoint's own order (newest-first for OpenAI); strip any
+  # "models/" prefix Gemini returns so the id round-trips to the chat backend.
+  ids <- sub("^models/", "", as.character(df$id))
+  ids <- ids[nzchar(ids)]
+  if (length(ids) == 0) NULL else ids
+}
+
 # --- System prompt -----------------------------------------------------------
 
 # Markdown context files, assembled in order into the system prompt.

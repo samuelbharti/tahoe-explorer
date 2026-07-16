@@ -26,7 +26,9 @@ do.call(
         .bslib-value-box { border-radius: 0.5rem; }
         "
       ),
-      fillable = FALSE
+      # Only pages that opt in (via register_page(fillable = TRUE)) become
+      # fillable -- currently the Chat page, so its chat fills the viewport.
+      fillable = app_fillable_pages()
     ),
     app_nav_panels()
   )

@@ -7,5 +7,8 @@ register_page(
   title = "Chat",
   order = 45,
   ui = chat_agent_ui("chat"),
-  server = function() chat_agent_server("chat")
+  server = function() chat_agent_server("chat"),
+  # Fillable so the chat fills the viewport (only the message list scrolls); the
+  # UI wraps itself in a fill carrier to match. See modules/chat_mod.R.
+  fillable = TRUE
 )

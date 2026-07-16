@@ -394,6 +394,71 @@ test_that("provider model suggestions default sanely and honour env override", {
   expect_equal(.tahoe_agent_provider_models("gemini"), c("m1", "m2"))
 })
 
+test_that(".tahoe_agent_fetch_models is safe for unknown providers and maps ids", {
+  # Unknown provider -> NULL without ever touching ellmer (the switch default).
+  expect_null(.tahoe_agent_fetch_models("nope", "sk-x"))
+
+  # Known providers resolve to ellmer's live listers (needs ellmer installed).
+  skip_if_not_installed("ellmer")
+  expect_true(is.function(.tahoe_agent_lister("gemini")))
+  expect_true(is.function(.tahoe_agent_lister("openai")))
+  expect_true(is.function(.tahoe_agent_lister("anthropic")))
+  expect_null(.tahoe_agent_lister("nope"))
+})
+
+test_that("chat_agent_server lists a key's live models via the injected fetcher", {
+  stub_factory <- function(credential) {
+    list(
+      on_tool_request = function(cb) invisible(NULL),
+      stream_async = function(text) paste0("REPLY:", text)
+    )
+  }
+  # A fetcher that only "succeeds" for the right provider + key, and mimics the
+  # real contract (character vector of ids, or NULL to fall back).
+  fetch_stub <- function(provider, api_key) {
+    if (identical(provider, "gemini") && identical(api_key, "sk-live")) {
+      c("gemini-live-1", "gemini-live-2")
+    } else {
+      NULL
+    }
+  }
+
+  testServer(
+    function(id) {
+      chat_agent_server(
+        id,
+        client_factory = stub_factory,
+        append = function(response) NULL,
+        fetch_models = fetch_stub
+      )
+    },
+    {
+      session$setInputs(source = "gemini")
+
+      # No key yet -> a nudge to enter one, no live fetch attempted.
+      session$setInputs(refresh_models = 1)
+      expect_false(isTRUE(model_note()$ok))
+      expect_match(model_note()$msg, "Enter a key", ignore.case = TRUE)
+
+      # A good key -> the live list loads and the note reports the count + label.
+      session$setInputs(api_key = "sk-live")
+      session$setInputs(refresh_models = 2)
+      expect_true(isTRUE(model_note()$ok))
+      expect_match(model_note()$msg, "2 models loaded", fixed = TRUE)
+
+      # A key the fetcher rejects -> graceful fallback message, note not ok.
+      session$setInputs(api_key = "sk-bad")
+      session$setInputs(refresh_models = 3)
+      expect_false(isTRUE(model_note()$ok))
+      expect_match(model_note()$msg, "Couldn't fetch", ignore.case = TRUE)
+
+      # Switching source clears the note.
+      session$setInputs(source = "openai")
+      expect_null(model_note())
+    }
+  )
+})
+
 test_that("chat_agent_server surfaces a provider error instead of crashing", {
   record <- new.env()
   record$appended <- list()

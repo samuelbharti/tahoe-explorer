@@ -74,74 +74,104 @@ chat_agent_ui <- function(id) {
     return(tagList(header, .chat_disabled_panel()))
   }
 
-  tagList(
+  # Fill carrier so the sidebar+chat layout grows to fill the (fillable) Chat
+  # panel: the chat fills the viewport minus the header and only the message list
+  # scrolls, so the page itself never scrolls. See userInterface/chat_page.R
+  # (fillable = TRUE). The compact CSS trims bslib's generous sidebar padding.
+  # A div (not a tagList) so as_fill_carrier can set the fill role on a real tag.
+  bslib::as_fill_carrier(div(
+    tags$style(HTML(
+      paste0(
+        ".tahoe-chat-layout .sidebar-content",
+        "{padding-top:12px !important;gap:8px !important;}",
+        ".tahoe-chat-layout .form-group,",
+        ".tahoe-chat-layout .shiny-input-container{margin-bottom:0 !important;}",
+        ".tahoe-chat-layout .control-label{margin-bottom:2px !important;}"
+      )
+    )),
     header,
-    bslib::layout_sidebar(
-      sidebar = bslib::sidebar(
-        title = "Model source",
-        width = 300,
-        selectInput(
-          ns("source"),
-          label = NULL,
-          choices = choices,
-          selected = unname(choices)[1]
-        ),
-        # Key form: shown for any BYOK provider, hidden for the shared default.
-        conditionalPanel(
-          condition = "input.source && input.source != 'shared'",
-          ns = ns,
-          uiOutput(ns("key_help")),
-          passwordInput(
-            ns("api_key"),
-            "API key",
-            placeholder = "Paste your key (kept in this session only)"
+    bslib::as_fill_carrier(div(
+      class = "tahoe-chat-layout",
+      bslib::layout_sidebar(
+        sidebar = bslib::sidebar(
+          title = "Model source",
+          width = 300,
+          selectInput(
+            ns("source"),
+            label = NULL,
+            choices = choices,
+            selected = unname(choices)[1]
           ),
-          # Model picker: choose a suggested model or type any id the key
-          # supports (create = TRUE). Left empty -> the provider's own default.
-          # Choices are repopulated per provider in the server.
-          selectizeInput(
-            ns("model"),
-            "Model",
-            choices = character(0),
-            selected = character(0),
-            multiple = FALSE,
-            options = list(
-              create = TRUE,
-              placeholder = "Provider default - pick or type a model"
-            )
-          ),
-          div(
-            class = "d-flex gap-2 mb-2",
-            actionButton(
-              ns("connect"),
-              "Connect",
-              class = "btn-primary btn-sm"
+          # Key form: shown for any BYOK provider, hidden for the shared default.
+          conditionalPanel(
+            condition = "input.source && input.source != 'shared'",
+            ns = ns,
+            uiOutput(ns("key_help")),
+            passwordInput(
+              ns("api_key"),
+              "API key",
+              placeholder = "Paste your key (kept in this session only)"
             ),
+            # Model picker: choose a suggested model or type any id the key
+            # supports (create = TRUE). Left empty -> the provider's own default.
+            # Choices are repopulated per provider in the server; the button
+            # below can replace them with the key's live, current model list.
+            selectizeInput(
+              ns("model"),
+              "Model",
+              choices = character(0),
+              selected = character(0),
+              multiple = FALSE,
+              options = list(
+                create = TRUE,
+                placeholder = "Provider default - pick or type a model"
+              )
+            ),
+            tags$p(
+              class = "text-muted small mb-1",
+              "Not listed? Type any model id your key supports and press Enter."
+            ),
+            # Pull the CURRENT, key-scoped model list from the provider so the
+            # picker never offers a stale or inaccessible model.
             actionButton(
-              ns("forget"),
-              "Forget key",
-              class = "btn-outline-secondary btn-sm"
+              ns("refresh_models"),
+              "List models for this key",
+              class = "btn-outline-secondary btn-sm mb-1"
+            ),
+            uiOutput(ns("model_source")),
+            div(
+              class = "d-flex gap-2 mb-2",
+              actionButton(
+                ns("connect"),
+                "Connect",
+                class = "btn-primary btn-sm"
+              ),
+              actionButton(
+                ns("forget"),
+                "Forget key",
+                class = "btn-outline-secondary btn-sm"
+              )
             )
+          ),
+          uiOutput(ns("cred_status")),
+          tags$p(
+            class = "text-muted small",
+            "Ask about Tahoe-100M, the app, drugs, cell lines, or building a",
+            "subset. Switching source starts a fresh conversation."
           )
         ),
-        uiOutput(ns("cred_status")),
-        tags$p(
-          class = "text-muted small",
-          "Ask about Tahoe-100M, the app, drugs, cell lines, or building a",
-          "subset. Switching source starts a fresh conversation."
-        )
-      ),
-      shinychat::chat_ui(
-        ns("chat"),
-        height = "70vh",
-        placeholder = "Ask about the dataset, drugs, cell lines, or a subset...",
-        greeting = paste(
-          "Hi! I can explain the **Tahoe-100M** dataset and this app, and help",
-          "you plan a subset for your analysis. What are you working on?"
+        shinychat::chat_ui(
+          ns("chat"),
+          height = "100%",
+          placeholder = "Ask about the dataset, drugs, cell lines, or a subset...",
+          greeting = paste(
+            "Hi! I can explain the **Tahoe-100M** dataset and this app, and help",
+            "you plan a subset for your analysis. What are you working on?"
+          )
         )
       )
-    )
-  )
+    ))
+  ))
 }
 
 #' Chat assistant server. `client_factory(credential)` builds the ellmer Chat
@@ -150,11 +180,27 @@ chat_agent_ui <- function(id) {
 #' so tests drive the module with a stub client and a recorder -- no network, no
 #' credentials. Injecting a `client_factory` also forces the enabled path even
 #' when the assistant is otherwise unavailable (e.g. the disabled test suite).
-chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
+#' `fetch_models(provider, api_key)` returns the key's live, current model ids
+#' (or NULL to fall back to the curated suggestions); it defaults to the real
+#' ellmer-backed fetch and is injectable so tests avoid the network.
+chat_agent_server <- function(
+  id,
+  client_factory = NULL,
+  append = NULL,
+  fetch_models = NULL
+) {
   moduleServer(id, function(input, output, session) {
     enabled <- !is.null(client_factory) || tahoe_agent_enabled()
     if (!enabled) {
       return(invisible(NULL))
+    }
+
+    # Live model lister -- injectable so tests avoid the network. Defaults to the
+    # real ellmer-backed fetch.
+    lister <- if (is.null(fetch_models)) {
+      .tahoe_agent_fetch_models
+    } else {
+      fetch_models
     }
 
     # Session-aware tools that read and drive the Subset builder (found lazily via
@@ -190,6 +236,8 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
     # The active BYOK key, held only to redact it from any surfaced error.
     # "" for the shared path or before a key is connected.
     active_secret <- reactiveVal("")
+    # Note shown under the "List models" button (fallback vs. live-loaded count).
+    model_note <- reactiveVal(NULL)
 
     # Attach the per-turn tool-name recorder to a freshly built client (for the
     # "tools used" footer). Re-attached on every rebuild.
@@ -260,8 +308,56 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
           selected = character(0),
           server = FALSE
         )
+        model_note(NULL)
         status(list(ok = FALSE, msg = "Enter your key and click Connect."))
       }
+    })
+
+    # Fetch the provider's live, key-scoped model list and repopulate the picker.
+    # Keeps whatever the user already typed selected; on failure we keep the
+    # curated fallback and say so, so this can never strand the user. (BYOK only;
+    # the shared Vertex source has no pasteable key to scope a listing to.)
+    observeEvent(input$refresh_models, {
+      src <- input$source
+      if (is.null(src) || identical(src, "shared") || !nzchar(src)) {
+        return()
+      }
+      key <- trimws(input$api_key %||% "")
+      if (!nzchar(key)) {
+        model_note(list(
+          ok = FALSE,
+          msg = "Enter a key first to list its models."
+        ))
+        return()
+      }
+      model_note(list(ok = FALSE, msg = "Fetching models..."))
+      ids <- tryCatch(lister(src, key), error = function(e) NULL)
+      if (is.null(ids) || length(ids) == 0) {
+        model_note(list(
+          ok = FALSE,
+          msg = paste(
+            "Couldn't fetch models for this key -- showing suggestions.",
+            "Type an id if needed."
+          )
+        ))
+        return()
+      }
+      updateSelectizeInput(
+        session,
+        "model",
+        choices = ids,
+        selected = isolate(trimws(input$model %||% "")),
+        server = FALSE
+      )
+      model_note(list(
+        ok = TRUE,
+        msg = paste0(
+          length(ids),
+          " models loaded live from ",
+          .tahoe_agent_provider_meta(src)$label,
+          "."
+        )
+      ))
     })
 
     observeEvent(input$connect, {
@@ -374,6 +470,15 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
       )
     })
 
+    output$model_source <- renderUI({
+      note <- model_note()
+      if (is.null(note)) {
+        return(NULL)
+      }
+      cls <- if (isTRUE(note$ok)) "text-success" else "text-muted"
+      div(class = paste("small mb-2", cls), note$msg)
+    })
+
     output$cred_status <- renderUI({
       st <- status()
       cls <- if (isTRUE(st$ok)) "text-success" else "text-muted"
@@ -384,7 +489,8 @@ chat_agent_server <- function(id, client_factory = NULL, append = NULL) {
       client = client,
       n_turns = n_turns,
       tools_used = tools_used,
-      status = status
+      status = status,
+      model_note = model_note
     ))
   })
 }

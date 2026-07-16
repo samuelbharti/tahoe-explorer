@@ -21,15 +21,26 @@
 
 #' Register a navigation page. `ui` is the page's UI (a tag/tagList); `server`
 #' is a zero-argument function that mounts the page's module server(s); lower
-#' `order` sorts earlier in the navbar. Re-registering the same `id` overwrites.
-register_page <- function(id, title, ui, server = NULL, order = 100) {
+#' `order` sorts earlier in the navbar. `fillable = TRUE` makes this panel a
+#' fillable container (its content grows to fill the viewport instead of the
+#' page scrolling) -- used by the Chat page so the chat fills the window.
+#' Re-registering the same `id` overwrites.
+register_page <- function(
+  id,
+  title,
+  ui,
+  server = NULL,
+  order = 100,
+  fillable = FALSE
+) {
   pages <- getOption("tahoe.pages", default = list())
   pages[[id]] <- list(
     id = id,
     title = title,
     ui = ui,
     server = server,
-    order = order
+    order = order,
+    fillable = fillable
   )
   options(tahoe.pages = pages)
   invisible()
@@ -51,6 +62,19 @@ app_nav_panels <- function() {
   unname(lapply(app_pages(), function(p) {
     bslib::nav_panel(title = p$title, value = p$id, p$ui)
   }))
+}
+
+#' The `value`s of pages that opted into a fillable panel, for page_navbar()'s
+#' `fillable` argument. Returns FALSE when none opted in (page_navbar treats an
+#' empty selection oddly, but FALSE cleanly means "no panel is fillable").
+app_fillable_pages <- function() {
+  ids <- vapply(
+    app_pages(),
+    function(p) if (isTRUE(p$fillable)) p$id else NA_character_,
+    character(1)
+  )
+  ids <- ids[!is.na(ids)]
+  if (length(ids) == 0) FALSE else unname(ids)
 }
 
 #' Mount every registered page's server (call inside the app server function).
