@@ -108,7 +108,10 @@ It can be powered two ways, chosen live from a **Model source** selector in the
 chat sidebar: a **shared** assistant the operator configures on Google Vertex
 (below), and/or **bring your own key** — each user pastes their own Gemini,
 OpenAI, or Anthropic key, held only in their browser session and never stored or
-logged. Either path alone is enough to enable the tab.
+logged. Either path alone is enough to enable the tab. With your own key you can
+pick a model from a short curated list or click **List models for this key** to
+load the provider's current, key-scoped models (so the picker never offers a
+model your account can't use) — or just type any model id and press Enter.
 
 To configure the shared assistant:
 
