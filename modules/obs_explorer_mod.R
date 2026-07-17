@@ -122,7 +122,7 @@ obs_explorer_ui <- function(id) {
       ),
       bslib::card(
         bslib::card_header("Filtered samples"),
-        reactable::reactableOutput(ns("sample_table")),
+        tahoe_table_ui(ns("sample_table")),
         tags$hr(),
         subset_export_ui(ns("sample_export"))
       )
@@ -175,7 +175,7 @@ obs_explorer_ui <- function(id) {
       ),
       bslib::card(
         bslib::card_header("Summary table"),
-        reactable::reactableOutput(ns("obs_table")),
+        tahoe_table_ui(ns("obs_table")),
         tags$hr(),
         subset_export_ui(ns("obs_export"))
       )
@@ -282,9 +282,7 @@ obs_explorer_server <- function(id) {
       )
     })
 
-    output$sample_table <- reactable::renderReactable({
-      tahoe_reactable(samples_filtered())
-    })
+    tahoe_table_server("sample_table", data = samples_filtered)
 
     subset_export_server(
       "sample_export",
@@ -422,9 +420,7 @@ obs_explorer_server <- function(id) {
       tahoe_plotly(.obs_bar(obs_plot_df(), tahoe_colors$sand, metric_label))
     })
 
-    output$obs_table <- reactable::renderReactable({
-      tahoe_reactable(obs_result())
-    })
+    tahoe_table_server("obs_table", data = obs_result)
 
     subset_export_server(
       "obs_export",
