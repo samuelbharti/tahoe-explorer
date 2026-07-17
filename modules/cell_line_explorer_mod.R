@@ -43,7 +43,9 @@ cell_line_explorer_ui <- function(id) {
   bslib::layout_sidebar(
     sidebar = bslib::sidebar(
       title = "Filters",
-      width = 300,
+      width = 250,
+      gap = "0.4rem",
+      padding = "0.6rem",
       selectizeInput(
         ns("organ"),
         "Organ",
@@ -71,48 +73,56 @@ cell_line_explorer_ui <- function(id) {
         placeholder = "e.g. SYNTH"
       )
     ),
-    bslib::card(
-      bslib::card_header("Matching cell lines"),
-      subset_export_ui(ns("export")),
-      tags$hr(),
-      tahoe_table_ui(ns("table"))
-    ),
+    # Tables on the left, their charts on the right, in two compact rows so the
+    # tab reads in a screen or two instead of one long scroll.
     bslib::layout_columns(
-      col_widths = c(6, 6),
+      col_widths = c(7, 5),
       bslib::card(
-        bslib::card_header("Cell lines by organ"),
-        plotly::plotlyOutput(ns("organ_plot"), height = 320)
+        full_screen = TRUE,
+        bslib::card_header("Matching cell lines"),
+        subset_export_ui(ns("export")),
+        tags$hr(),
+        tahoe_table_ui(ns("table"))
       ),
-      bslib::card(
-        bslib::card_header("Top driver genes"),
-        plotly::plotlyOutput(ns("gene_plot"), height = 320)
+      div(
+        bslib::card(
+          bslib::card_header("Cell lines by organ"),
+          plotly::plotlyOutput(ns("organ_plot"), height = 260)
+        ),
+        bslib::card(
+          bslib::card_header("Top driver genes"),
+          plotly::plotlyOutput(ns("gene_plot"), height = 260)
+        ),
+        bslib::card(
+          bslib::card_header("Variant-type breakdown"),
+          plotly::plotlyOutput(ns("var_type_plot"), height = 260)
+        )
       )
     ),
-    bslib::card(
-      bslib::card_header("Variant-type breakdown"),
-      plotly::plotlyOutput(ns("var_type_plot"), height = 300)
-    ),
-    bslib::card(
-      full_screen = TRUE,
-      bslib::card_header(
-        class = "d-flex justify-content-between align-items-center",
-        span("Somatic variants"),
-        .info_pop(
-          paste(
-            "Somatic mutation calls for the matching cell lines. Full somatic",
-            "profiles from DepMap 24Q4 (CC BY 4.0) where available, with curated",
-            "driver variants from Cellosaurus for lines DepMap does not cover.",
-            "One row per variant; the source column shows the origin. Empty",
-            "until dev/download_variants.R is run; the demo uses synthetic data."
-          ),
-          title = "Somatic variants"
-        )
+    bslib::layout_columns(
+      col_widths = c(7, 5),
+      bslib::card(
+        full_screen = TRUE,
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Somatic variants"),
+          .info_pop(
+            paste(
+              "Somatic mutation calls for the matching cell lines. Full somatic",
+              "profiles from DepMap 24Q4 (CC BY 4.0) where available, with curated",
+              "driver variants from Cellosaurus for lines DepMap does not cover.",
+              "One row per variant; the source column shows the origin. Empty",
+              "until dev/download_variants.R is run; the demo uses synthetic data."
+            ),
+            title = "Somatic variants"
+          )
+        ),
+        tahoe_table_ui(ns("variants"))
       ),
-      tahoe_table_ui(ns("variants"))
-    ),
-    bslib::card(
-      bslib::card_header("Most frequently mutated genes"),
-      plotly::plotlyOutput(ns("mutated_genes_plot"), height = 300)
+      bslib::card(
+        bslib::card_header("Most frequently mutated genes"),
+        plotly::plotlyOutput(ns("mutated_genes_plot"), height = 300)
+      )
     )
   )
 }
