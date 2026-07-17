@@ -459,6 +459,59 @@ test_that("chat_agent_server lists a key's live models via the injected fetcher"
   )
 })
 
+test_that("provider env-key detection finds the right variable", {
+  withr::local_envvar(
+    GEMINI_API_KEY = NA,
+    GOOGLE_API_KEY = NA,
+    OPENAI_API_KEY = NA,
+    ANTHROPIC_API_KEY = NA,
+    TAHOE_AGENT_BYOK_PROVIDERS = NA
+  )
+  expect_equal(.tahoe_agent_provider_env_key("gemini"), "")
+  expect_null(tahoe_agent_env_provider())
+
+  withr::local_envvar(OPENAI_API_KEY = "sk-openai-xyz")
+  expect_equal(.tahoe_agent_provider_env_key("openai"), "sk-openai-xyz")
+  # env_provider picks the first offered provider whose key is present.
+  expect_equal(tahoe_agent_env_provider(), "openai")
+
+  # The Gemini provider also honours the GOOGLE_API_KEY alias.
+  withr::local_envvar(GOOGLE_API_KEY = "goog-key")
+  expect_equal(.tahoe_agent_provider_env_key("gemini"), "goog-key")
+})
+
+test_that("chat_agent_server connects with an environment key (no paste)", {
+  withr::local_envvar(GEMINI_API_KEY = "env-secret-abc")
+  record <- new.env()
+  record$creds <- list()
+  stub_factory <- function(credential) {
+    record$creds[[length(record$creds) + 1L]] <- credential
+    list(
+      on_tool_request = function(cb) invisible(NULL),
+      stream_async = function(text) paste0("REPLY:", text)
+    )
+  }
+
+  testServer(
+    function(id) {
+      chat_agent_server(
+        id,
+        client_factory = stub_factory,
+        append = function(response) NULL
+      )
+    },
+    {
+      session$setInputs(source = "gemini")
+      # No key pasted -> Connect should fall back to the environment key.
+      session$setInputs(connect = 1)
+      expect_false(is.null(client()))
+      cred <- record$creds[[length(record$creds)]]
+      expect_equal(cred$provider, "gemini")
+      expect_equal(cred$api_key, "env-secret-abc")
+    }
+  )
+})
+
 test_that("chat_agent_server surfaces a provider error instead of crashing", {
   record <- new.env()
   record$appended <- list()

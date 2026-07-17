@@ -74,14 +74,29 @@ chat_agent_ui <- function(id) {
     return(tagList(header, .chat_disabled_panel()))
   }
 
+  # Prefer a source that connects without pasting: the shared Vertex default if
+  # configured, otherwise a BYOK provider whose key is already in the
+  # environment, otherwise the first offered provider.
+  default_source <- if (tahoe_agent_default_available()) {
+    "shared"
+  } else {
+    tahoe_agent_env_provider() %||% unname(choices)[1]
+  }
+
   # Fill carrier so the sidebar+chat layout grows to fill the (fillable) Chat
   # panel: the chat fills the viewport minus the header and only the message list
   # scrolls, so the page itself never scrolls. See userInterface/chat_page.R
   # (fillable = TRUE). The compact CSS trims bslib's generous sidebar padding.
   # A div (not a tagList) so as_fill_carrier can set the fill role on a real tag.
   bslib::as_fill_carrier(div(
+    class = "tahoe-chat-page",
     tags$style(HTML(
       paste0(
+        # bslib's fillable-panel layout resets this pane's padding to 0, so the
+        # global 4vw page gutter (ui.R) doesn't reach the Chat tab -- restore it
+        # here on the page wrapper so the chat lines up with the other tabs.
+        ".tahoe-chat-page",
+        "{padding-left:4vw !important;padding-right:4vw !important;}",
         ".tahoe-chat-layout .sidebar-content",
         "{padding-top:12px !important;gap:8px !important;}",
         ".tahoe-chat-layout .form-group,",
@@ -95,12 +110,12 @@ chat_agent_ui <- function(id) {
       bslib::layout_sidebar(
         sidebar = bslib::sidebar(
           title = "Model source",
-          width = 300,
+          width = 420,
           selectInput(
             ns("source"),
             label = NULL,
             choices = choices,
-            selected = unname(choices)[1]
+            selected = default_source
           ),
           # Key form: shown for any BYOK provider, hidden for the shared default.
           conditionalPanel(
@@ -162,7 +177,10 @@ chat_agent_ui <- function(id) {
         ),
         shinychat::chat_ui(
           ns("chat"),
-          height = "100%",
+          # Explicit tall height (viewport minus navbar/header/footer chrome) so
+          # the chat fills most of the screen without making the whole page a
+          # fixed-height fillable container (which would break the app footer).
+          height = "calc(100vh - 250px)",
           placeholder = "Ask about the dataset, drugs, cell lines, or a subset...",
           greeting = paste(
             "Hi! I can explain the **Tahoe-100M** dataset and this app, and help",
@@ -309,7 +327,19 @@ chat_agent_server <- function(
           server = FALSE
         )
         model_note(NULL)
-        status(list(ok = FALSE, msg = "Enter your key and click Connect."))
+        # If a key is already in the environment, tell the user they can skip
+        # pasting and just pick a model + Connect.
+        if (nzchar(.tahoe_agent_provider_env_key(src))) {
+          status(list(
+            ok = FALSE,
+            msg = paste(
+              "A key was found in your environment — pick a model and click",
+              "Connect (no need to paste)."
+            )
+          ))
+        } else {
+          status(list(ok = FALSE, msg = "Enter your key and click Connect."))
+        }
       }
     })
 
@@ -323,6 +353,11 @@ chat_agent_server <- function(
         return()
       }
       key <- trimws(input$api_key %||% "")
+      # Fall back to a key already in the environment, so the live model list
+      # works without pasting.
+      if (!nzchar(key)) {
+        key <- .tahoe_agent_provider_env_key(src)
+      }
       if (!nzchar(key)) {
         model_note(list(
           ok = FALSE,
@@ -366,8 +401,16 @@ chat_agent_server <- function(
         return()
       }
       key <- trimws(input$api_key %||% "")
+      # Fall back to a key already in the environment so the user can connect
+      # without pasting one.
       if (!nzchar(key)) {
-        status(list(ok = FALSE, msg = "Please paste an API key first."))
+        key <- .tahoe_agent_provider_env_key(src)
+      }
+      if (!nzchar(key)) {
+        status(list(
+          ok = FALSE,
+          msg = "Paste an API key, or set the provider's environment variable."
+        ))
         return()
       }
       model <- trimws(input$model %||% "")
@@ -453,20 +496,29 @@ chat_agent_server <- function(
         return(NULL)
       }
       meta <- .tahoe_agent_provider_meta(src)
-      if (is.null(meta$key_url)) {
-        return(NULL)
-      }
-      tags$p(
-        class = "small mb-1",
-        tags$a(
-          href = meta$key_url,
-          target = "_blank",
-          rel = "noopener",
-          "Get a key"
-        ),
-        " for ",
-        meta$label,
-        "."
+      env_found <- nzchar(.tahoe_agent_provider_env_key(src))
+      tagList(
+        if (!is.null(meta$key_url)) {
+          tags$p(
+            class = "small mb-1",
+            tags$a(
+              href = meta$key_url,
+              target = "_blank",
+              rel = "noopener",
+              "Get a key"
+            ),
+            " for ",
+            meta$label,
+            "."
+          )
+        },
+        if (env_found) {
+          tags$p(
+            class = "small text-success mb-1",
+            "✓ A key was found in your environment — leave the field",
+            " blank and just pick a model and Connect."
+          )
+        }
       )
     })
 

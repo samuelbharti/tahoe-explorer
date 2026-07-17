@@ -7,8 +7,8 @@ register_page(
   title = "Chat",
   order = 45,
   ui = chat_agent_ui("chat"),
-  server = function() chat_agent_server("chat"),
-  # Fillable so the chat fills the viewport (only the message list scrolls); the
-  # UI wraps itself in a fill carrier to match. See modules/chat_mod.R.
-  fillable = TRUE
+  server = function() chat_agent_server("chat")
+  # Not a fillable panel: a fillable panel forces the whole page to a fixed
+  # viewport height, which pins the app footer mid-page over tall tabs. The chat
+  # instead gets an explicit viewport-relative height in modules/chat_mod.R.
 )
