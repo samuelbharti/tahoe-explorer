@@ -136,24 +136,46 @@ tahoe_agent_byok_providers <- function() {
   intersect(parts[nzchar(parts)], .tahoe_agent_known_byok)
 }
 
-#' UI metadata for a BYOK provider: a display label and where to get a key.
+#' UI metadata for a BYOK provider: a display label, where to get a key, and the
+#' environment variables checked for a server-side key (so a user with a key
+#' already in the environment can connect without pasting one).
 .tahoe_agent_provider_meta <- function(provider) {
   switch(
     provider,
     gemini = list(
       label = "Google Gemini (your key)",
-      key_url = "https://aistudio.google.com/apikey"
+      key_url = "https://aistudio.google.com/apikey",
+      env = c("GEMINI_API_KEY", "GOOGLE_API_KEY")
     ),
     openai = list(
       label = "OpenAI (your key)",
-      key_url = "https://platform.openai.com/api-keys"
+      key_url = "https://platform.openai.com/api-keys",
+      env = "OPENAI_API_KEY"
     ),
     anthropic = list(
       label = "Anthropic Claude (your key)",
-      key_url = "https://console.anthropic.com/settings/keys"
+      key_url = "https://console.anthropic.com/settings/keys",
+      env = "ANTHROPIC_API_KEY"
     ),
-    list(label = provider, key_url = NULL)
+    list(label = provider, key_url = NULL, env = character(0))
   )
+}
+
+#' The environment key for a BYOK provider, or "" if none is set.
+.tahoe_agent_provider_env_key <- function(provider) {
+  .tahoe_env_first(.tahoe_agent_provider_meta(provider)$env)
+}
+
+#' The first offered BYOK provider that already has a key in the environment, or
+#' NULL. Used to default the chat's "Model source" to a ready-to-connect
+#' provider when no shared (Vertex) assistant is configured.
+tahoe_agent_env_provider <- function() {
+  for (p in tahoe_agent_byok_providers()) {
+    if (nzchar(.tahoe_agent_provider_env_key(p))) {
+      return(p)
+    }
+  }
+  NULL
 }
 
 #' Suggested model ids for a BYOK provider's picker, overridable via

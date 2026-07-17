@@ -15,6 +15,16 @@ if (!nzchar(Sys.getenv("TAHOE_TEST_USE_REAL"))) {
 # inject a stub client_factory, which bypasses this gate.
 Sys.setenv(TAHOE_AGENT_DISABLE = "1")
 
+# Unset any ambient provider API keys so the BYOK env-key-fallback tests are
+# deterministic regardless of the developer's environment; tests that need one
+# set it locally via withr::local_envvar().
+Sys.unsetenv(c(
+  "GEMINI_API_KEY",
+  "GOOGLE_API_KEY",
+  "OPENAI_API_KEY",
+  "ANTHROPIC_API_KEY"
+))
+
 # Load the app's helper code (utilities, modules, page UI) so that unit and
 # server tests can reference it directly. `chdir = TRUE` runs global.R from the
 # app root so its relative source() paths resolve.
