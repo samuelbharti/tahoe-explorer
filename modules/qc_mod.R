@@ -8,8 +8,10 @@
 qc_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    uiOutput(ns("value_boxes")),
+    # tour_* ids anchor the guided demo (see R/tour.R).
+    div(id = ns("tour_boxes"), uiOutput(ns("value_boxes"))),
     bslib::card(
+      id = ns("tour_controls"),
       bslib::card_body(
         class = "py-2",
         bslib::layout_columns(
@@ -35,6 +37,7 @@ qc_ui <- function(id) {
       )
     ),
     bslib::layout_columns(
+      id = ns("tour_power"),
       col_widths = c(6, 6),
       bslib::card(
         height = "44vh",
@@ -79,6 +82,7 @@ qc_ui <- function(id) {
       )
     ),
     bslib::layout_columns(
+      id = ns("tour_batch"),
       col_widths = c(6, 6),
       bslib::card(
         height = "40vh",
@@ -115,6 +119,7 @@ qc_ui <- function(id) {
       )
     ),
     bslib::card(
+      id = ns("tour_phase"),
       height = "42vh",
       bslib::card_header(
         class = "d-flex justify-content-between align-items-center",

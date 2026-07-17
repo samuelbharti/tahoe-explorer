@@ -2,14 +2,24 @@
 function(input, output, session) {
   mount_page_servers()
 
-  # Guided demo. The navbar "Demo" button jumps to the Drugs tab and starts the
-  # click-through tour. The guide is initialised once per session. The start is
-  # deferred briefly so the Drugs tab-pane is laid out before cicerone measures
-  # its first target (starting in the same flush lands on a hidden element).
-  guide <- drug_tour()
-  guide$init()
+  # Guided demo. Every page has a cicerone tour (R/tour.R); the navbar "Demo"
+  # button starts the tour for whichever tab is active. Guides are built and
+  # initialised once per session. The start is deferred briefly so the tab pane
+  # is laid out before cicerone measures its first target (a same-flush start
+  # can land on an element that has not finished showing).
+  guides <- lapply(tahoe_tours(), function(build) build())
+  for (g in guides) {
+    g$init()
+  }
   observeEvent(input$demo_tour, {
-    bslib::nav_select("main_nav", "drugs", session = session)
-    later::later(function() guide$start(session = session), delay = 0.4)
+    guide <- guides[[input$main_nav %||% ""]]
+    if (is.null(guide)) {
+      showNotification(
+        "No demo is available for this page yet.",
+        type = "message"
+      )
+      return()
+    }
+    later::later(function() guide$start(session = session), delay = 0.3)
   })
 }
