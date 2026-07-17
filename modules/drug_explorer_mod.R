@@ -4,6 +4,11 @@
 # approval status, clinical-trial status, target, and name; then view the
 # filtered set as a table (with PubChem links) plus summary charts and export
 # the current subset. Reads only the small drug metadata table, so it is fast.
+#
+# The page is cross-linked: selecting a drug row (or the sidebar picker -- the
+# two stay in sync) drives a detail card and the target-mutation cross-reference,
+# and highlights that drug's mechanism / approval / targets in the charts.
+# Clicking a chart bar filters the table to that category (charts -> filters).
 
 # Distinct, sorted, non-missing values of a column, or character(0) if absent.
 .drug_choices <- function(df, column) {
@@ -26,26 +31,69 @@
   sort(unique(atoms))
 }
 
-# Horizontal bar chart of the value counts of `column` in `df`.
-.drug_count_bar <- function(df, column, fill, top_n = 12) {
+# A single field value from a one-row drug data frame, or NA if the column is
+# absent / empty. Used to build the detail card defensively.
+.drug_field <- function(row, col) {
+  if (is.null(row) || !col %in% names(row)) {
+    return(NA_character_)
+  }
+  v <- row[[col]][[1]]
+  if (is.null(v) || is.na(v) || !nzchar(as.character(v))) {
+    return(NA_character_)
+  }
+  as.character(v)
+}
+
+# Shared horizontal-bar geom for the summary charts. `plot_df` carries `label`
+# (a factor, reverse-ordered for coord_flip), `n`, and `hl` (logical: is this
+# category part of the selected drug?). A `key` aesthetic makes each bar's
+# category readable from a plotly click; highlighted bars get the accent color.
+.drug_bar_geom <- function(plot_df, base_fill, y_lab) {
+  ggplot2::ggplot(
+    plot_df,
+    ggplot2::aes(x = label, y = n, key = label, fill = hl)
+  ) +
+    ggplot2::geom_col() +
+    ggplot2::scale_fill_manual(
+      values = c(`FALSE` = base_fill, `TRUE` = tahoe_colors$orange),
+      guide = "none"
+    ) +
+    ggplot2::coord_flip() +
+    ggplot2::scale_y_continuous(expand = ggplot2::expansion(c(0, 0.12))) +
+    ggplot2::labs(x = NULL, y = y_lab) +
+    tahoe_theme()
+}
+
+# Horizontal bar chart of the value counts of `column` in `df`. `highlight` is a
+# character vector of category values to emphasize (the selected drug's).
+.drug_count_bar <- function(
+  df,
+  column,
+  base_fill,
+  highlight = character(0),
+  top_n = 12
+) {
   validate(need(column %in% names(df), "Column not available"))
   validate(need(nrow(df) > 0, "No drugs match the current filters"))
   counts <- sort(table(df[[column]]), decreasing = TRUE)
   counts <- utils::head(counts, top_n)
   plot_df <- data.frame(
     label = factor(names(counts), levels = rev(names(counts))),
-    n = as.integer(counts)
+    n = as.integer(counts),
+    stringsAsFactors = FALSE
   )
-  ggplot2::ggplot(plot_df, ggplot2::aes(x = label, y = n)) +
-    ggplot2::geom_col(fill = fill) +
-    ggplot2::coord_flip() +
-    ggplot2::scale_y_continuous(expand = ggplot2::expansion(c(0, 0.12))) +
-    ggplot2::labs(x = NULL, y = "Count") +
-    tahoe_theme()
+  plot_df$hl <- as.character(plot_df$label) %in% highlight
+  .drug_bar_geom(plot_df, base_fill, "Count")
 }
 
-# Horizontal bar chart of the top-N most frequent targets in `df`.
-.drug_target_bar <- function(df, fill, top_n = 12) {
+# Horizontal bar chart of the top-N most frequent targets in `df`. `highlight`
+# is a vector of target genes to emphasize (the selected drug's targets).
+.drug_target_bar <- function(
+  df,
+  base_fill,
+  highlight = character(0),
+  top_n = 12
+) {
   validate(need("targets" %in% names(df), "Targets not available"))
   validate(need(nrow(df) > 0, "No drugs match the current filters"))
   atoms <- unlist(stringr::str_split(df[["targets"]], ","))
@@ -56,14 +104,62 @@
   counts <- utils::head(counts, top_n)
   plot_df <- data.frame(
     label = factor(names(counts), levels = rev(names(counts))),
-    n = as.integer(counts)
+    n = as.integer(counts),
+    stringsAsFactors = FALSE
   )
-  ggplot2::ggplot(plot_df, ggplot2::aes(x = label, y = n)) +
-    ggplot2::geom_col(fill = fill) +
-    ggplot2::coord_flip() +
-    ggplot2::scale_y_continuous(expand = ggplot2::expansion(c(0, 0.12))) +
-    ggplot2::labs(x = NULL, y = "Drugs") +
-    tahoe_theme()
+  plot_df$hl <- as.character(plot_df$label) %in% highlight
+  .drug_bar_geom(plot_df, base_fill, "Drugs")
+}
+
+# Build the selected-drug detail card body from a one-row drug data frame.
+.drug_detail_ui <- function(row) {
+  item <- function(label, value) {
+    if (is.na(value)) {
+      return(NULL)
+    }
+    div(
+      class = "col-6 col-md-4 mb-2",
+      div(
+        class = "text-muted small text-uppercase",
+        style = "letter-spacing:.03em;",
+        label
+      ),
+      div(value)
+    )
+  }
+  cid <- .drug_field(row, "pubchem_cid")
+  pubchem <- if (!is.na(cid)) {
+    div(
+      class = "col-6 col-md-4 mb-2",
+      div(
+        class = "text-muted small text-uppercase",
+        style = "letter-spacing:.03em;",
+        "PubChem"
+      ),
+      tags$a(
+        href = paste0("https://pubchem.ncbi.nlm.nih.gov/compound/", cid),
+        target = "_blank",
+        rel = "noopener",
+        paste0("CID ", cid)
+      )
+    )
+  } else {
+    NULL
+  }
+  notes <- .drug_field(row, "gpt-notes-approval")
+  tags$div(
+    tags$h5(.drug_field(row, "drug"), class = "mb-2"),
+    div(
+      class = "row",
+      item("Targets", .drug_field(row, "targets")),
+      item("MOA (broad)", .drug_field(row, "moa-broad")),
+      item("MOA (fine)", .drug_field(row, "moa-fine")),
+      item("Human approved", .drug_field(row, "human-approved")),
+      item("Clinical trials", .drug_field(row, "clinical-trials")),
+      pubchem
+    ),
+    if (!is.na(notes)) div(class = "text-muted small mt-1", notes) else NULL
+  )
 }
 
 drug_explorer_ui <- function(id) {
@@ -71,7 +167,9 @@ drug_explorer_ui <- function(id) {
   bslib::layout_sidebar(
     sidebar = bslib::sidebar(
       title = "Filters",
-      width = 300,
+      width = 250,
+      gap = "0.4rem",
+      padding = "0.6rem",
       uiOutput(ns("filter_moa_broad")),
       uiOutput(ns("filter_moa_fine")),
       uiOutput(ns("filter_approval")),
@@ -89,61 +187,71 @@ drug_explorer_ui <- function(id) {
       tags$hr(),
       selectizeInput(
         ns("focus_drug"),
-        "Cross-reference a drug",
+        "Selected drug",
         choices = NULL,
         options = list(placeholder = "Pick a drug…")
       ),
       div(
         class = "text-muted small",
-        "Which assayed cell lines carry a mutation in this drug's target."
+        "Click a table row or pick here — the two stay in sync."
       )
     ),
+    # Two columns: the table (browse) on the left; the selected drug's detail,
+    # target mutations, and summary charts + export stacked on the right, so a
+    # row click updates that column top-to-bottom.
     bslib::layout_columns(
-      col_widths = 12,
+      col_widths = c(7, 5),
       bslib::card(
+        full_screen = TRUE,
         bslib::card_header("Filtered drugs"),
-        reactable::reactableOutput(ns("table"))
-      )
-    ),
-    bslib::card(
-      full_screen = TRUE,
-      bslib::card_header(
-        class = "d-flex justify-content-between align-items-center",
-        span("Target mutations in assayed cell lines"),
-        .info_pop(
-          paste(
-            "For the drug picked in the sidebar, the assayed cell lines that",
-            "carry a somatic variant in one of its target genes -- the lines",
-            "over which a target-mutant vs wild-type contrast could be designed.",
-            "Restricted to lines present in the obs grid; variants from DepMap /",
-            "Cellosaurus. Empty until variant data is loaded."
+        div(
+          class = "text-muted small px-1 pb-1",
+          "Click a row to select a drug — its details, target mutations, and",
+          " summary charts appear in the next column, with its mechanism /",
+          " approval / targets highlighted. Click a chart bar to filter the table."
+        ),
+        tahoe_table_ui(ns("tbl"))
+      ),
+      div(
+        bslib::card(
+          bslib::card_header("Selected drug"),
+          uiOutput(ns("drug_detail"))
+        ),
+        bslib::card(
+          full_screen = TRUE,
+          bslib::card_header(
+            class = "d-flex justify-content-between align-items-center",
+            span("Target mutations in assayed cell lines"),
+            .info_pop(
+              paste(
+                "For the selected drug, the assayed cell lines that",
+                "carry a somatic variant in one of its target genes -- the lines",
+                "over which a target-mutant vs wild-type contrast could be",
+                "designed. Restricted to lines present in the obs grid; variants",
+                "from DepMap / Cellosaurus. Empty until variant data is loaded."
+              ),
+              title = "Target mutations"
+            )
           ),
-          title = "Target mutations"
+          uiOutput(ns("target_mut_caption")),
+          tahoe_table_ui(ns("muttbl"))
+        ),
+        bslib::card(
+          bslib::card_header("Drugs by mechanism (MOA, broad)"),
+          plotly::plotlyOutput(ns("moa_broad_plot"), height = 260)
+        ),
+        bslib::card(
+          bslib::card_header("Approval status"),
+          plotly::plotlyOutput(ns("approval_plot"), height = 260)
+        ),
+        bslib::card(
+          bslib::card_header("Top targets"),
+          plotly::plotlyOutput(ns("targets_plot"), height = 260)
+        ),
+        bslib::card(
+          bslib::card_header("Export current subset"),
+          subset_export_ui(ns("export"))
         )
-      ),
-      uiOutput(ns("target_mut_caption")),
-      reactable::reactableOutput(ns("target_mut_table"))
-    ),
-    bslib::layout_columns(
-      col_widths = c(6, 6),
-      bslib::card(
-        bslib::card_header("Drugs by mechanism (MOA, broad)"),
-        plotly::plotlyOutput(ns("moa_broad_plot"), height = 300)
-      ),
-      bslib::card(
-        bslib::card_header("Approval status"),
-        plotly::plotlyOutput(ns("approval_plot"), height = 300)
-      )
-    ),
-    bslib::layout_columns(
-      col_widths = c(6, 6),
-      bslib::card(
-        bslib::card_header("Top targets"),
-        plotly::plotlyOutput(ns("targets_plot"), height = 300)
-      ),
-      bslib::card(
-        bslib::card_header("Export current subset"),
-        subset_export_ui(ns("export"))
       )
     )
   )
@@ -241,12 +349,20 @@ drug_explorer_server <- function(id) {
       df
     })
 
-    output$table <- reactable::renderReactable({
-      df <- filtered()
-      validate(need(
-        nrow(df) > 0,
-        "No drugs match the current filters"
-      ))
+    # The selected drug's full record (from the whole table, so it survives a
+    # filter that would hide the row), or NULL when nothing is selected.
+    selected_row <- reactive({
+      foc <- input$focus_drug
+      if (is.null(foc) || !nzchar(foc)) {
+        return(NULL)
+      }
+      d <- drugs()
+      r <- d[as.character(d$drug) == foc, , drop = FALSE]
+      if (nrow(r) == 0) NULL else r[1, , drop = FALSE]
+    })
+
+    # Per-column overrides for the drugs table: render pubchem_cid as a link.
+    drug_table_cols <- function(df) {
       col_defs <- list()
       if ("pubchem_cid" %in% names(df)) {
         col_defs[["pubchem_cid"]] <- reactable::colDef(
@@ -268,30 +384,134 @@ drug_explorer_server <- function(id) {
           }
         )
       }
-      tahoe_reactable(df, columns = col_defs)
+      col_defs
+    }
+
+    # The drugs table, with a column chooser and single-row selection. SMILES
+    # and the free-text approval notes are hidden by default (both appear in the
+    # detail card). `default_selected` re-highlights the focus drug's row after a
+    # filter re-render.
+    tbl <- tahoe_table_server(
+      "tbl",
+      data = filtered,
+      columns = drug_table_cols,
+      hidden = c("canonical_smiles", "gpt-notes-approval"),
+      selection = "single",
+      on_click = "select",
+      default_selected = function(df) {
+        foc <- isolate(input$focus_drug)
+        if (is.null(foc) || !nzchar(foc)) {
+          return(NULL)
+        }
+        i <- which(as.character(df$drug) == foc)
+        if (length(i) == 1) i else NULL
+      },
+      empty_message = "No drugs match the current filters"
+    )
+
+    # --- Table <-> picker two-way sync ---------------------------------------
+    # A row click updates the picker (the canonical selection); guard against a
+    # no-op update so the two observers can't ping-pong.
+    observeEvent(tbl$selected(), {
+      sel <- tbl$selected()
+      if (length(sel) == 0) {
+        return()
+      }
+      df <- filtered()
+      if (sel < 1 || sel > nrow(df)) {
+        return()
+      }
+      drug <- as.character(df$drug[[sel]])
+      if (!identical(drug, input$focus_drug %||% "")) {
+        updateSelectizeInput(session, "focus_drug", selected = drug)
+      }
     })
 
+    # A picker change highlights the matching table row (isolate the state read
+    # so this observer fires only on the picker, not on selection changes).
+    observeEvent(input$focus_drug, {
+      df <- filtered()
+      idx <- which(as.character(df$drug) == (input$focus_drug %||% ""))
+      cur <- isolate(tbl$selected())
+      if (length(idx) == 1) {
+        if (!identical(as.integer(cur), as.integer(idx))) {
+          tbl$set_selected(idx)
+        }
+      } else if (length(cur) > 0) {
+        tbl$set_selected(NA)
+      }
+    })
+
+    # --- Chart -> filter (click a bar to filter the table) -------------------
+    observeEvent(plotly::event_data("plotly_click", source = "drug_moa"), {
+      k <- plotly::event_data("plotly_click", source = "drug_moa")$key
+      if (is.null(k) || !nzchar(as.character(k))) {
+        return()
+      }
+      updateSelectizeInput(
+        session,
+        "moa_broad",
+        selected = union(input$moa_broad, as.character(k))
+      )
+    })
+    observeEvent(plotly::event_data("plotly_click", source = "drug_approval"), {
+      k <- plotly::event_data("plotly_click", source = "drug_approval")$key
+      if (is.null(k) || !nzchar(as.character(k))) {
+        return()
+      }
+      updateSelectizeInput(
+        session,
+        "approval",
+        selected = union(input$approval, as.character(k))
+      )
+    })
+    observeEvent(plotly::event_data("plotly_click", source = "drug_targets"), {
+      k <- plotly::event_data("plotly_click", source = "drug_targets")$key
+      if (is.null(k) || !nzchar(as.character(k))) {
+        return()
+      }
+      updateTextInput(session, "target_search", value = as.character(k))
+    })
+
+    # --- Charts (highlight the selected drug's categories) -------------------
     output$moa_broad_plot <- plotly::renderPlotly({
-      tahoe_plotly(.drug_count_bar(
-        filtered(),
-        "moa-broad",
-        tahoe_colors$primary
-      ))
+      hl <- .drug_field(selected_row(), "moa-broad")
+      tahoe_plotly(
+        .drug_count_bar(
+          filtered(),
+          "moa-broad",
+          tahoe_colors$primary,
+          highlight = if (is.na(hl)) character(0) else hl
+        ),
+        source = "drug_moa"
+      )
     })
 
     output$approval_plot <- plotly::renderPlotly({
-      tahoe_plotly(.drug_count_bar(
-        filtered(),
-        "human-approved",
-        tahoe_colors$green
-      ))
+      hl <- .drug_field(selected_row(), "human-approved")
+      tahoe_plotly(
+        .drug_count_bar(
+          filtered(),
+          "human-approved",
+          tahoe_colors$green,
+          highlight = if (is.na(hl)) character(0) else hl
+        ),
+        source = "drug_approval"
+      )
     })
 
     output$targets_plot <- plotly::renderPlotly({
-      tahoe_plotly(.drug_target_bar(filtered(), tahoe_colors$sand))
+      tahoe_plotly(
+        .drug_target_bar(
+          filtered(),
+          tahoe_colors$sand,
+          highlight = focus_targets()
+        ),
+        source = "drug_targets"
+      )
     })
 
-    # Populate the cross-reference picker with drugs that declare a target.
+    # Populate the picker with drugs that declare a target.
     observeEvent(drugs(), once = TRUE, {
       d <- drugs()
       choices <- if ("targets" %in% names(d)) {
@@ -308,6 +528,17 @@ drug_explorer_server <- function(id) {
         selected = if (length(choices)) choices[[1]] else character(0),
         server = TRUE
       )
+    })
+
+    output$drug_detail <- renderUI({
+      r <- selected_row()
+      if (is.null(r)) {
+        return(div(
+          class = "text-muted small",
+          "Select a drug row (or use the sidebar picker) to see its details."
+        ))
+      }
+      .drug_detail_ui(r)
     })
 
     focus_targets <- reactive(tahoe_drug_targets(input$focus_drug))
@@ -338,12 +569,12 @@ drug_explorer_server <- function(id) {
       )
     })
 
-    output$target_mut_table <- reactable::renderReactable({
+    # Ordered, column-trimmed view of the target-mutation hits for display.
+    mut_display <- reactive({
       hits <- target_hits()
-      validate(need(
-        nrow(hits) > 0,
-        "No assayed cell line carries a mutation in this drug's target(s)."
-      ))
+      if (is.null(hits) || nrow(hits) == 0) {
+        return(hits)
+      }
       pref <- c(
         "cell_name",
         "gene",
@@ -353,8 +584,16 @@ drug_explorer_server <- function(id) {
         "source"
       )
       df <- hits[, intersect(pref, names(hits)), drop = FALSE]
-      tahoe_reactable(df[order(df$gene, df$cell_name), , drop = FALSE])
+      df[order(df$gene, df$cell_name), , drop = FALSE]
     })
+
+    tahoe_table_server(
+      "muttbl",
+      data = mut_display,
+      empty_message = paste(
+        "No assayed cell line carries a mutation in this drug's target(s)."
+      )
+    )
 
     subset_export_server(
       "export",
