@@ -10,6 +10,7 @@ library(reactable)
 library(plotly)
 library(DBI)
 library(duckdb)
+library(cicerone) # click-through guided tours (see R/tour.R)
 
 # Plots are themed explicitly via R/theme.R (tahoe_theme / tahoe_plotly) and
 # rendered as interactive plotly widgets, so no thematic auto-styling is needed.

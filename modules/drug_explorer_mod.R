@@ -170,30 +170,37 @@ drug_explorer_ui <- function(id) {
       width = 250,
       gap = "0.4rem",
       padding = "0.6rem",
-      uiOutput(ns("filter_moa_broad")),
-      uiOutput(ns("filter_moa_fine")),
-      uiOutput(ns("filter_approval")),
-      uiOutput(ns("filter_trials")),
-      textInput(
-        ns("target_search"),
-        "Target contains",
-        placeholder = "e.g. EGFR"
-      ),
-      textInput(
-        ns("name_search"),
-        "Drug name contains",
-        placeholder = "e.g. Synthdrug"
+      # tour_* ids anchor the guided demo (see R/tour.R).
+      div(
+        id = ns("tour_filters"),
+        uiOutput(ns("filter_moa_broad")),
+        uiOutput(ns("filter_moa_fine")),
+        uiOutput(ns("filter_approval")),
+        uiOutput(ns("filter_trials")),
+        textInput(
+          ns("target_search"),
+          "Target contains",
+          placeholder = "e.g. EGFR"
+        ),
+        textInput(
+          ns("name_search"),
+          "Drug name contains",
+          placeholder = "e.g. Synthdrug"
+        )
       ),
       tags$hr(),
-      selectizeInput(
-        ns("focus_drug"),
-        "Selected drug",
-        choices = NULL,
-        options = list(placeholder = "Pick a drug…")
-      ),
       div(
-        class = "text-muted small",
-        "Click a table row or pick here — the two stay in sync."
+        id = ns("tour_picker"),
+        selectizeInput(
+          ns("focus_drug"),
+          "Selected drug",
+          choices = NULL,
+          options = list(placeholder = "Pick a drug…")
+        ),
+        div(
+          class = "text-muted small",
+          "Click a table row or pick here — the two stay in sync."
+        )
       )
     ),
     # Two columns: the table (browse) on the left; the selected drug's detail,
@@ -202,6 +209,7 @@ drug_explorer_ui <- function(id) {
     bslib::layout_columns(
       col_widths = c(7, 5),
       bslib::card(
+        id = ns("tour_table"),
         full_screen = TRUE,
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
@@ -218,10 +226,12 @@ drug_explorer_ui <- function(id) {
       ),
       div(
         bslib::card(
+          id = ns("tour_detail"),
           bslib::card_header("Selected drug"),
           uiOutput(ns("drug_detail"))
         ),
         bslib::card(
+          id = ns("tour_mut"),
           full_screen = TRUE,
           bslib::card_header(
             class = "d-flex justify-content-between align-items-center",
@@ -245,19 +255,23 @@ drug_explorer_ui <- function(id) {
           uiOutput(ns("target_mut_caption")),
           tahoe_table_ui(ns("muttbl"))
         ),
-        bslib::card(
-          bslib::card_header("Drugs by mechanism (MOA, broad)"),
-          plotly::plotlyOutput(ns("moa_broad_plot"), height = 260)
+        div(
+          id = ns("tour_charts"),
+          bslib::card(
+            bslib::card_header("Drugs by mechanism (MOA, broad)"),
+            plotly::plotlyOutput(ns("moa_broad_plot"), height = 260)
+          ),
+          bslib::card(
+            bslib::card_header("Approval status"),
+            plotly::plotlyOutput(ns("approval_plot"), height = 260)
+          ),
+          bslib::card(
+            bslib::card_header("Top targets"),
+            plotly::plotlyOutput(ns("targets_plot"), height = 260)
+          )
         ),
         bslib::card(
-          bslib::card_header("Approval status"),
-          plotly::plotlyOutput(ns("approval_plot"), height = 260)
-        ),
-        bslib::card(
-          bslib::card_header("Top targets"),
-          plotly::plotlyOutput(ns("targets_plot"), height = 260)
-        ),
-        bslib::card(
+          id = ns("tour_export"),
           bslib::card_header("Export current subset"),
           subset_export_ui(ns("export"))
         )
