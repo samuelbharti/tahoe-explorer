@@ -172,6 +172,8 @@ tahoe_subset_recipe <- function(
         "Pick a tissue, driver, cell line, drug, dose, or plate to build a",
         "reproducible subset predicate."
       ),
+      r_code = NULL,
+      py_code = NULL,
       cells = cells,
       samples = n_samp,
       obs_mb = obs_mb
@@ -270,8 +272,198 @@ tahoe_subset_recipe <- function(
   )
   list(
     recipe = paste(header, "", r_snippet, "", py_snippet, sep = "\n"),
+    r_code = r_snippet,
+    py_code = py_snippet,
     cells = cells,
     samples = n_samp,
     obs_mb = obs_mb
+  )
+}
+
+# --- Downloadable recipe documents (R Markdown / Quarto / Jupyter) ------------
+#
+# The same subset recipe, packaged as a ready-to-open notebook so a user can
+# download a scaffold rather than copy-pasting. All three formats carry both the
+# R (duckdb) and Python (scanpy) approaches; the code chunks are marked
+# non-evaluating (they hit the network / reference a placeholder h5ad path), so
+# the document renders safely and the user fills in the last step.
+
+# Drop a leading decorative "## ..." comment line from a code snippet (the doc
+# adds its own markdown section header instead).
+.subset_code_body <- function(code) {
+  lines <- strsplit(code, "\n", fixed = TRUE)[[1]]
+  if (length(lines) > 0 && grepl("^## ", lines[1])) {
+    lines <- lines[-1]
+  }
+  # Trim a single leading blank line left by the stripped header.
+  if (length(lines) > 0 && !nzchar(lines[1])) {
+    lines <- lines[-1]
+  }
+  paste(lines, collapse = "\n")
+}
+
+# Prose intro shared by every format (a markdown block).
+.subset_intro <- function(parts) {
+  paste(
+    c(
+      "This document reproduces a Tahoe-100M subset selected in Tahoe Explorer.",
+      "",
+      sprintf(
+        paste0(
+          "- **Estimated size:** ~%s cells across %s samples ",
+          "(~%s MB of obs metadata to scan)."
+        ),
+        .subset_fmt(parts$cells),
+        .subset_fmt(parts$samples),
+        .subset_fmt(parts$obs_mb)
+      ),
+      sprintf("- **Source:** `%s`", .subset_obs_hf),
+      "- The expression matrix is downloaded separately and is larger.",
+      "",
+      paste(
+        "Two equivalent approaches are shown — R (duckdb) and Python (scanpy).",
+        "Keep whichever you prefer."
+      )
+    ),
+    collapse = "\n"
+  )
+}
+
+# nbformat source array: one element per line, each ending in "\n" except the
+# last, so Jupyter reconstructs the text exactly.
+.subset_nb_source <- function(text) {
+  lines <- strsplit(text, "\n", fixed = TRUE)[[1]]
+  if (length(lines) == 0) {
+    return(list(""))
+  }
+  out <- paste0(lines, "\n")
+  out[length(out)] <- lines[[length(lines)]]
+  as.list(out)
+}
+
+.subset_nb_md <- function(text) {
+  list(
+    cell_type = "markdown",
+    metadata = stats::setNames(list(), character()),
+    source = .subset_nb_source(text)
+  )
+}
+
+.subset_nb_code <- function(text) {
+  list(
+    cell_type = "code",
+    metadata = stats::setNames(list(), character()),
+    execution_count = NA,
+    outputs = list(),
+    source = .subset_nb_source(text)
+  )
+}
+
+# A Jupyter (.ipynb) notebook, Python-kernel: the scanpy code as an executable
+# cell, the duckdb/R approach shown in a markdown cell (a Jupyter notebook runs
+# a single kernel, so the R alternative is reference rather than executable).
+.subset_ipynb <- function(title, intro, r_body, py_body) {
+  cells <- list(.subset_nb_md(paste0("# ", title, "\n\n", intro)))
+  if (!is.null(r_body)) {
+    cells <- c(
+      cells,
+      list(.subset_nb_md(paste0(
+        "## R (duckdb) — alternative\n\nRun this in an R session:\n\n```r\n",
+        r_body,
+        "\n```"
+      )))
+    )
+  }
+  if (!is.null(py_body)) {
+    cells <- c(
+      cells,
+      list(.subset_nb_md("## Python (scanpy)")),
+      list(.subset_nb_code(py_body))
+    )
+  }
+  nb <- list(
+    cells = cells,
+    metadata = list(
+      kernelspec = list(
+        name = "python3",
+        display_name = "Python 3",
+        language = "python"
+      ),
+      language_info = list(name = "python")
+    ),
+    nbformat = 4L,
+    nbformat_minor = 5L
+  )
+  as.character(jsonlite::toJSON(
+    nb,
+    auto_unbox = TRUE,
+    na = "null",
+    pretty = TRUE
+  ))
+}
+
+#' Render a subset recipe (from tahoe_subset_recipe()) as a downloadable
+#' notebook: "rmd" (R Markdown), "qmd" (Quarto), or "ipynb" (Jupyter). Returns
+#' the file content as a single string.
+tahoe_subset_document <- function(
+  parts,
+  format = c("rmd", "qmd", "ipynb"),
+  title = "Tahoe-100M subset"
+) {
+  format <- match.arg(format)
+  have_code <- !is.null(parts$r_code) && !is.null(parts$py_code)
+
+  # No filters selected: emit a minimal doc carrying the explanatory message.
+  if (!have_code) {
+    msg <- parts$recipe %||% "No filters selected."
+    if (identical(format, "ipynb")) {
+      return(.subset_ipynb(title, msg, NULL, NULL))
+    }
+    yaml <- if (identical(format, "qmd")) {
+      c("---", sprintf('title: "%s"', title), "format: html", "---")
+    } else {
+      c("---", sprintf('title: "%s"', title), "output: html_document", "---")
+    }
+    return(paste(c(yaml, "", msg, ""), collapse = "\n"))
+  }
+
+  r_body <- .subset_code_body(parts$r_code)
+  py_body <- .subset_code_body(parts$py_code)
+  intro <- .subset_intro(parts)
+
+  if (identical(format, "ipynb")) {
+    return(.subset_ipynb(title, intro, r_body, py_body))
+  }
+
+  if (identical(format, "qmd")) {
+    yaml <- c("---", sprintf('title: "%s"', title), "format: html", "---")
+    r_chunk <- c("```{r}", "#| eval: false", r_body, "```")
+    py_chunk <- c("```{python}", "#| eval: false", py_body, "```")
+  } else {
+    yaml <- c(
+      "---",
+      sprintf('title: "%s"', title),
+      "output: html_document",
+      "---"
+    )
+    r_chunk <- c("```{r, eval=FALSE}", r_body, "```")
+    py_chunk <- c("```{python, eval=FALSE}", py_body, "```")
+  }
+  paste(
+    c(
+      yaml,
+      "",
+      intro,
+      "",
+      "## R (duckdb)",
+      "",
+      r_chunk,
+      "",
+      "## Python (scanpy)",
+      "",
+      py_chunk,
+      ""
+    ),
+    collapse = "\n"
   )
 }

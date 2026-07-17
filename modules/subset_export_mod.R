@@ -30,9 +30,30 @@ subset_export_ui <- function(id, show_recipe = FALSE) {
         tags$strong("Analysis recipe"),
         tags$p(
           class = "text-muted small",
-          "Copy-paste code to reproduce this selection on the full dataset."
+          "Copy-paste code to reproduce this selection on the full dataset,",
+          " or download it as a notebook to start from."
         ),
-        verbatimTextOutput(ns("recipe"))
+        verbatimTextOutput(ns("recipe")),
+        div(
+          class = "d-flex gap-2 flex-wrap align-items-end",
+          div(
+            style = "min-width: 210px;",
+            selectInput(
+              ns("recipe_format"),
+              "Download as notebook",
+              choices = c(
+                "R Markdown (.Rmd)" = "rmd",
+                "Quarto (.qmd)" = "qmd",
+                "Jupyter (.ipynb)" = "ipynb"
+              )
+            )
+          ),
+          downloadButton(
+            ns("recipe_dl"),
+            "Download",
+            class = "btn-sm btn-outline-primary mb-3"
+          )
+        )
       )
     }
   )
@@ -50,7 +71,8 @@ subset_export_server <- function(
   id,
   data_reactive,
   file_stem = "tahoe_subset",
-  recipe = NULL
+  recipe = NULL,
+  recipe_parts = NULL
 ) {
   moduleServer(id, function(input, output, session) {
     current_data <- reactive({
@@ -98,10 +120,37 @@ subset_export_server <- function(
       }
     )
 
-    if (!is.null(recipe)) {
+    # The recipe text: prefer the structured parts (which also power the
+    # notebook download) and fall back to a plain recipe string.
+    if (!is.null(recipe_parts)) {
+      output$recipe <- renderText({
+        parts <- .export_resolve(recipe_parts, default = NULL)
+        if (is.null(parts)) "" else parts$recipe %||% ""
+      })
+    } else if (!is.null(recipe)) {
       output$recipe <- renderText({
         .export_resolve(recipe, default = "")
       })
+    }
+
+    if (!is.null(recipe_parts)) {
+      recipe_ext <- c(rmd = ".Rmd", qmd = ".qmd", ipynb = ".ipynb")
+      output$recipe_dl <- downloadHandler(
+        filename = function() {
+          fmt <- input$recipe_format %||% "rmd"
+          paste0(stem(), "_recipe", recipe_ext[[fmt]])
+        },
+        content = function(file) {
+          parts <- .export_resolve(recipe_parts, default = NULL)
+          fmt <- input$recipe_format %||% "rmd"
+          text <- if (is.null(parts)) {
+            "No selection to export."
+          } else {
+            tahoe_subset_document(parts, format = fmt)
+          }
+          writeLines(text, file, useBytes = TRUE)
+        }
+      )
     }
 
     invisible(current_data)

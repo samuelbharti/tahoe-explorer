@@ -421,20 +421,20 @@ subset_builder_server <- function(id) {
     # built by the shared recipe logic in R/subset_recipe.R (also used by the
     # Chat assistant's build_subset_recipe tool). The tissue / driver filters are
     # resolved to their concrete cell_name set inside tahoe_subset_recipe().
-    recipe <- reactive(
+    recipe_parts <- reactive(
       tahoe_subset_recipe(
         selection(),
         grid(),
         driver_lines(),
         tahoe_sample()
-      )$recipe
+      )
     )
 
     subset_export_server(
       "export",
       data_reactive = matched_samples,
       file_stem = "tahoe_subset",
-      recipe = recipe
+      recipe_parts = recipe_parts
     )
 
     # --- Chat-assistant bridge -------------------------------------------------
