@@ -133,9 +133,44 @@ tahoe_subset_matched_lines <- function(sel, grid, lines_tbl) {
   sum(keep)
 }
 
+# Commented setup notes prepended to each snippet: which packages to install
+# (uncomment to run), a nudge toward an isolated/reproducible environment, and
+# how to supply a Hugging Face token for gated or rate-limited access.
+.subset_r_preamble <- function() {
+  paste(
+    "# ── Setup (uncomment to install) ─────────────────────────────",
+    '# install.packages(c("duckdb", "DBI"))',
+    "# Reproducible, project-local library (recommended):",
+    '# install.packages("renv"); renv::init()',
+    "# Hugging Face token — the obs parquet is public, but a token avoids",
+    "# rate limits and unlocks gated files. Create one at",
+    "# https://huggingface.co/settings/tokens, then add HF_TOKEN to a project",
+    '# .Renviron file (or run Sys.setenv(HF_TOKEN = "hf_...")) and register it',
+    "# as a duckdb secret after connecting:",
+    "# dbExecute(con, \"CREATE SECRET (TYPE huggingface, TOKEN getenv('HF_TOKEN'))\")",
+    sep = "\n"
+  )
+}
+
+.subset_py_preamble <- function() {
+  paste(
+    "# ── Setup (uncomment to install) ─────────────────────────────",
+    "# pip install pandas scanpy pyarrow huggingface_hub",
+    "# Isolated environment (recommended):",
+    "# python -m venv .venv && source .venv/bin/activate   # or: uv venv",
+    "# Hugging Face token — the obs parquet is public, but a token avoids",
+    "# rate limits and unlocks gated files. Create one at",
+    "# https://huggingface.co/settings/tokens, then add HF_TOKEN to a .env /",
+    "# environment file, or authenticate in Python:",
+    "# from huggingface_hub import login; login()",
+    sep = "\n"
+  )
+}
+
 #' Build the reproducible subset recipe (R duckdb + Python scanpy) and size
 #' estimate for a selection across the six subset dimensions. Returns
-#' list(recipe, cells, samples, obs_mb). `sel` is a list(organs, drivers,
+#' list(recipe, header, r_code, py_code, cells, samples, obs_mb). `sel` is a
+#' list(organs, drivers,
 #' cell_lines, drugs, doses, plates); the data tables default to the cached data
 #' layer so the agent tool can call it with just a selection, while the Subset
 #' Builder passes its (possibly async) reactive grid + cell-line table.
@@ -172,6 +207,7 @@ tahoe_subset_recipe <- function(
         "Pick a tissue, driver, cell line, drug, dose, or plate to build a",
         "reproducible subset predicate."
       ),
+      header = NULL,
       r_code = NULL,
       py_code = NULL,
       cells = cells,
@@ -246,6 +282,8 @@ tahoe_subset_recipe <- function(
   )
   r_snippet <- paste(
     "## R (duckdb) — pull the subset's cell-level metadata ---------",
+    .subset_r_preamble(),
+    "",
     "library(duckdb); library(DBI)",
     "con <- dbConnect(duckdb())",
     'dbExecute(con, "INSTALL httpfs; LOAD httpfs;")',
@@ -259,6 +297,8 @@ tahoe_subset_recipe <- function(
   )
   py_snippet <- paste(
     "## Python (scanpy / AnnData) — subset cells for analysis ------",
+    .subset_py_preamble(),
+    "",
     "import pandas as pd, scanpy as sc",
     sprintf('obs = pd.read_parquet(\n    "%s"\n)', .subset_obs_hf),
     sprintf("mask = (\n    %s\n)", gsub("df\\[", "obs[", py_predicate)),
@@ -272,6 +312,7 @@ tahoe_subset_recipe <- function(
   )
   list(
     recipe = paste(header, "", r_snippet, "", py_snippet, sep = "\n"),
+    header = header,
     r_code = r_snippet,
     py_code = py_snippet,
     cells = cells,
@@ -283,8 +324,10 @@ tahoe_subset_recipe <- function(
 # --- Downloadable recipe documents (R Markdown / Quarto / Jupyter) ------------
 #
 # The same subset recipe, packaged as a ready-to-open notebook so a user can
-# download a scaffold rather than copy-pasting. All three formats carry both the
-# R (duckdb) and Python (scanpy) approaches; the code chunks are marked
+# download a scaffold rather than copy-pasting. Each document is single-language
+# — R (duckdb) or Python (scanpy) — chosen by the caller, so an R and a Python
+# step are never mixed in one file; the Jupyter export uses the matching kernel
+# (IRkernel for R, python3 for Python). The code chunks are marked
 # non-evaluating (they hit the network / reference a placeholder h5ad path), so
 # the document renders safely and the user fills in the last step.
 
@@ -302,8 +345,19 @@ tahoe_subset_recipe <- function(
   paste(lines, collapse = "\n")
 }
 
-# Prose intro shared by every format (a markdown block).
-.subset_intro <- function(parts) {
+# Prose intro shared by every format (a markdown block), tailored to the chosen
+# language.
+.subset_intro <- function(parts, language) {
+  lang_label <- if (identical(language, "r")) {
+    "R (duckdb)"
+  } else {
+    "Python (scanpy)"
+  }
+  env_tip <- if (identical(language, "r")) {
+    "using renv keeps the analysis reproducible."
+  } else {
+    "using a virtual environment keeps the analysis reproducible."
+  }
   paste(
     c(
       "This document reproduces a Tahoe-100M subset selected in Tahoe Explorer.",
@@ -318,15 +372,26 @@ tahoe_subset_recipe <- function(
         .subset_fmt(parts$obs_mb)
       ),
       sprintf("- **Source:** `%s`", .subset_obs_hf),
+      sprintf("- **Language:** %s", lang_label),
       "- The expression matrix is downloaded separately and is larger.",
       "",
       paste(
-        "Two equivalent approaches are shown — R (duckdb) and Python (scanpy).",
-        "Keep whichever you prefer."
+        "The setup lines list the packages to install (uncomment to run) and",
+        "how to supply a Hugging Face token;",
+        env_tip
       )
     ),
     collapse = "\n"
   )
+}
+
+# Jupyter kernelspec for the chosen language.
+.subset_kernel <- function(language) {
+  if (identical(language, "r")) {
+    list(name = "ir", display_name = "R", language = "R")
+  } else {
+    list(name = "python3", display_name = "Python 3", language = "python")
+  }
 }
 
 # nbformat source array: one element per line, each ending in "\n" except the
@@ -359,37 +424,20 @@ tahoe_subset_recipe <- function(
   )
 }
 
-# A Jupyter (.ipynb) notebook, Python-kernel: the scanpy code as an executable
-# cell, the duckdb/R approach shown in a markdown cell (a Jupyter notebook runs
-# a single kernel, so the R alternative is reference rather than executable).
-.subset_ipynb <- function(title, intro, r_body, py_body) {
+# A single-language Jupyter (.ipynb) notebook: an intro markdown cell followed
+# by one executable code cell, using the kernel that matches `language`.
+.subset_ipynb <- function(title, intro, body, language) {
   cells <- list(.subset_nb_md(paste0("# ", title, "\n\n", intro)))
-  if (!is.null(r_body)) {
-    cells <- c(
-      cells,
-      list(.subset_nb_md(paste0(
-        "## R (duckdb) — alternative\n\nRun this in an R session:\n\n```r\n",
-        r_body,
-        "\n```"
-      )))
-    )
-  }
-  if (!is.null(py_body)) {
-    cells <- c(
-      cells,
-      list(.subset_nb_md("## Python (scanpy)")),
-      list(.subset_nb_code(py_body))
-    )
+  if (!is.null(body)) {
+    cells <- c(cells, list(.subset_nb_code(body)))
   }
   nb <- list(
     cells = cells,
     metadata = list(
-      kernelspec = list(
-        name = "python3",
-        display_name = "Python 3",
-        language = "python"
-      ),
-      language_info = list(name = "python")
+      kernelspec = .subset_kernel(language),
+      language_info = list(
+        name = if (identical(language, "r")) "R" else "python"
+      )
     ),
     nbformat = 4L,
     nbformat_minor = 5L
@@ -402,22 +450,26 @@ tahoe_subset_recipe <- function(
   ))
 }
 
-#' Render a subset recipe (from tahoe_subset_recipe()) as a downloadable
-#' notebook: "rmd" (R Markdown), "qmd" (Quarto), or "ipynb" (Jupyter). Returns
+#' Render a subset recipe (from tahoe_subset_recipe()) as a downloadable,
+#' single-language notebook. `format` is "rmd" (R Markdown), "qmd" (Quarto), or
+#' "ipynb" (Jupyter); `language` is "r" (duckdb) or "python" (scanpy). Returns
 #' the file content as a single string.
 tahoe_subset_document <- function(
   parts,
   format = c("rmd", "qmd", "ipynb"),
+  language = c("r", "python"),
   title = "Tahoe-100M subset"
 ) {
   format <- match.arg(format)
-  have_code <- !is.null(parts$r_code) && !is.null(parts$py_code)
+  language <- match.arg(language)
+  code <- if (identical(language, "r")) parts$r_code else parts$py_code
+  have_code <- !is.null(code)
 
   # No filters selected: emit a minimal doc carrying the explanatory message.
   if (!have_code) {
     msg <- parts$recipe %||% "No filters selected."
     if (identical(format, "ipynb")) {
-      return(.subset_ipynb(title, msg, NULL, NULL))
+      return(.subset_ipynb(title, msg, NULL, language))
     }
     yaml <- if (identical(format, "qmd")) {
       c("---", sprintf('title: "%s"', title), "format: html", "---")
@@ -427,18 +479,22 @@ tahoe_subset_document <- function(
     return(paste(c(yaml, "", msg, ""), collapse = "\n"))
   }
 
-  r_body <- .subset_code_body(parts$r_code)
-  py_body <- .subset_code_body(parts$py_code)
-  intro <- .subset_intro(parts)
+  body <- .subset_code_body(code)
+  intro <- .subset_intro(parts, language)
+  section <- if (identical(language, "r")) {
+    "## R (duckdb)"
+  } else {
+    "## Python (scanpy)"
+  }
 
   if (identical(format, "ipynb")) {
-    return(.subset_ipynb(title, intro, r_body, py_body))
+    return(.subset_ipynb(title, intro, body, language))
   }
 
   if (identical(format, "qmd")) {
     yaml <- c("---", sprintf('title: "%s"', title), "format: html", "---")
-    r_chunk <- c("```{r}", "#| eval: false", r_body, "```")
-    py_chunk <- c("```{python}", "#| eval: false", py_body, "```")
+    engine <- if (identical(language, "r")) "r" else "python"
+    chunk <- c(sprintf("```{%s}", engine), "#| eval: false", body, "```")
   } else {
     yaml <- c(
       "---",
@@ -446,24 +502,11 @@ tahoe_subset_document <- function(
       "output: html_document",
       "---"
     )
-    r_chunk <- c("```{r, eval=FALSE}", r_body, "```")
-    py_chunk <- c("```{python, eval=FALSE}", py_body, "```")
+    engine <- if (identical(language, "r")) "r" else "python"
+    chunk <- c(sprintf("```{%s, eval=FALSE}", engine), body, "```")
   }
   paste(
-    c(
-      yaml,
-      "",
-      intro,
-      "",
-      "## R (duckdb)",
-      "",
-      r_chunk,
-      "",
-      "## Python (scanpy)",
-      "",
-      py_chunk,
-      ""
-    ),
+    c(yaml, "", intro, "", section, "", chunk, ""),
     collapse = "\n"
   )
 }
