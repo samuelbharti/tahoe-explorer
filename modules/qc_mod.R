@@ -51,7 +51,7 @@ qc_ui <- function(id) {
             title = "Underpowered conditions"
           )
         ),
-        reactable::reactableOutput(ns("under_table"))
+        tahoe_table_ui(ns("under_table"))
       ),
       bslib::card(
         height = "44vh",
@@ -67,7 +67,7 @@ qc_ui <- function(id) {
             title = "Incomplete dose series"
           )
         ),
-        reactable::reactableOutput(ns("dose_table"))
+        tahoe_table_ui(ns("dose_table"))
       )
     ),
     bslib::layout_columns(
@@ -340,12 +340,12 @@ qc_server <- function(id) {
       do.call(bslib::layout_columns, c(list(fill = FALSE), boxes))
     })
 
-    output$under_table <- reactable::renderReactable({
+    # Ordered, labelled view of the underpowered conditions for display.
+    under_display <- reactive({
       df <- underpowered()
-      validate(need(
-        nrow(df) > 0,
-        "No underpowered conditions at this threshold."
-      ))
+      if (is.null(df) || nrow(df) == 0) {
+        return(df)
+      }
       has_full <- "n_full" %in% names(df)
       cols <- c(
         "drug",
@@ -357,38 +357,45 @@ qc_server <- function(id) {
       )
       df <- df[order(df[[power_col()]]), cols]
       df$conc <- paste0(df$conc, " µM")
+      df
+    })
+    under_cols <- function(df) {
       coldefs <- list(conc = reactable::colDef(name = "Dose"))
-      if (has_full) {
+      if ("n_full" %in% names(df)) {
         coldefs$n_full <- reactable::colDef(name = "QC-pass cells")
       }
-      tahoe_reactable(
-        df,
-        columns = coldefs,
-        pagination = FALSE,
-        height = "34vh"
-      )
-    })
+      coldefs
+    }
+    tahoe_table_server(
+      "under_table",
+      data = under_display,
+      columns = under_cols,
+      pagination = FALSE,
+      height = "34vh",
+      empty_message = "No underpowered conditions at this threshold."
+    )
 
-    output$dose_table <- reactable::renderReactable({
+    dose_display <- reactive({
       df <- incomplete()
-      validate(need(
-        nrow(df) > 0,
-        "Every drug × cell-line combo has the full dose series."
-      ))
-      df <- df[
+      if (is.null(df) || nrow(df) == 0) {
+        return(df)
+      }
+      df[
         order(df$n_doses),
         c("drug", "cell_name", "organ", "doses", "n_doses")
       ]
-      tahoe_reactable(
-        df,
-        columns = list(
-          doses = reactable::colDef(name = "Doses present (µM)"),
-          n_doses = reactable::colDef(name = "# Doses")
-        ),
-        pagination = FALSE,
-        height = "34vh"
-      )
     })
+    tahoe_table_server(
+      "dose_table",
+      data = dose_display,
+      columns = list(
+        doses = reactable::colDef(name = "Doses present (µM)"),
+        n_doses = reactable::colDef(name = "# Doses")
+      ),
+      pagination = FALSE,
+      height = "34vh",
+      empty_message = "Every drug × cell-line combo has the full dose series."
+    )
 
     output$control_plot <- plotly::renderPlotly({
       tahoe_plotly(.qc_control_bar(control_by_line()), tooltip = "text")

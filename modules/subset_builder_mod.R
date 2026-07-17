@@ -136,7 +136,7 @@ subset_builder_ui <- function(id) {
       ),
       bslib::card(
         bslib::card_header("Matched samples"),
-        reactable::reactableOutput(ns("preview"))
+        tahoe_table_ui(ns("preview"))
       )
     ),
     bslib::card(
@@ -383,9 +383,7 @@ subset_builder_server <- function(id) {
       tahoe_plotly(p)
     })
 
-    output$preview <- reactable::renderReactable({
-      tahoe_reactable(matched_samples(), page_size = 8)
-    })
+    tahoe_table_server("preview", data = matched_samples, page_size = 8)
 
     # Estimated size of the subset: cells (from the grid), matched samples, and
     # the approximate obs metadata to scan. Expression is separate and larger.

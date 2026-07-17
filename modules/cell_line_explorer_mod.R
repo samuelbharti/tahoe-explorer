@@ -75,7 +75,7 @@ cell_line_explorer_ui <- function(id) {
       bslib::card_header("Matching cell lines"),
       subset_export_ui(ns("export")),
       tags$hr(),
-      reactable::reactableOutput(ns("table"))
+      tahoe_table_ui(ns("table"))
     ),
     bslib::layout_columns(
       col_widths = c(6, 6),
@@ -108,7 +108,7 @@ cell_line_explorer_ui <- function(id) {
           title = "Somatic variants"
         )
       ),
-      reactable::reactableOutput(ns("variants"))
+      tahoe_table_ui(ns("variants"))
     ),
     bslib::card(
       bslib::card_header("Most frequently mutated genes"),
@@ -161,12 +161,9 @@ cell_line_explorer_server <- function(id) {
       ]
     })
 
-    output$table <- reactable::renderReactable({
-      df <- filtered_lines()
-      validate(need(nrow(df) > 0, "No cell lines match the current filters."))
-
-      # Turn the DepMap ID into a clickable portal link when present, keeping
-      # the original ID text as the link label.
+    # Turn the DepMap ID into a clickable portal link when present, keeping
+    # the original ID text as the link label.
+    cell_line_cols <- function(df) {
       col_defs <- list()
       if ("Cell_ID_DepMap" %in% names(df)) {
         col_defs[["Cell_ID_DepMap"]] <- reactable::colDef(
@@ -185,9 +182,15 @@ cell_line_explorer_server <- function(id) {
           }
         )
       }
+      col_defs
+    }
 
-      tahoe_reactable(df, columns = col_defs)
-    })
+    tahoe_table_server(
+      "table",
+      data = filtered_lines,
+      columns = cell_line_cols,
+      empty_message = "No cell lines match the current filters."
+    )
 
     # Somatic variants for the matching lines: an inner join of the external
     # variant table onto the filtered cell lines by cell name (every line has
@@ -208,16 +211,12 @@ cell_line_explorer_server <- function(id) {
       dplyr::inner_join(lines[, keep, drop = FALSE], v, by = "cell_name")
     })
 
-    output$variants <- reactable::renderReactable({
+    # Column-trimmed, preferred-order view of the matching variants.
+    variants_display <- reactive({
       v <- variants()
-      validate(need(
-        nrow(v) > 0,
-        paste(
-          "No somatic variants for the matching cell lines.",
-          "Run dev/download_variants.R to load DepMap / Cellosaurus variants",
-          "(the offline demo shows synthetic variants)."
-        )
-      ))
+      if (is.null(v) || nrow(v) == 0) {
+        return(v)
+      }
       pref <- c(
         "cell_name",
         "source",
@@ -230,8 +229,18 @@ cell_line_explorer_server <- function(id) {
         "likely_lof",
         "dbsnp"
       )
-      tahoe_reactable(v[, intersect(pref, names(v)), drop = FALSE])
+      v[, intersect(pref, names(v)), drop = FALSE]
     })
+
+    tahoe_table_server(
+      "variants",
+      data = variants_display,
+      empty_message = paste(
+        "No somatic variants for the matching cell lines.",
+        "Run dev/download_variants.R to load DepMap / Cellosaurus variants",
+        "(the offline demo shows synthetic variants)."
+      )
+    )
 
     output$mutated_genes_plot <- plotly::renderPlotly({
       v <- variants()

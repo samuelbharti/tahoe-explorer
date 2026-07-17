@@ -142,21 +142,30 @@ tahoe_reactable_theme <- function() {
 #' Column headers are normalized to Title Case with janitor::clean_names() so
 #' every table reads consistently; pass `columns` colDefs to override specific
 #' ones (an explicit `name` wins, otherwise the Title Case label is injected).
+#' `hidden` names columns to render collapsed (still present, just not shown) --
+#' the reusable column chooser (tahoe_table) drives this from a checkbox list.
 #' Extra reactable() arguments (e.g. `selection`, `onClick`) pass through `...`.
-tahoe_reactable <- function(data, columns = list(), ..., page_size = 10) {
+tahoe_reactable <- function(
+  data,
+  columns = list(),
+  ...,
+  page_size = 10,
+  hidden = character(0)
+) {
   labels <- janitor::make_clean_names(names(data), case = "title")
   names(labels) <- names(data)
   col_defs <- list()
   for (nm in names(data)) {
     override <- columns[[nm]]
     if (is.null(override)) {
-      col_defs[[nm]] <- reactable::colDef(name = labels[[nm]])
-    } else {
-      if (is.null(override$name)) {
-        override$name <- labels[[nm]]
-      }
-      col_defs[[nm]] <- override
+      override <- reactable::colDef(name = labels[[nm]])
+    } else if (is.null(override$name)) {
+      override$name <- labels[[nm]]
     }
+    if (nm %in% hidden) {
+      override$show <- FALSE
+    }
+    col_defs[[nm]] <- override
   }
   reactable::reactable(
     data,
