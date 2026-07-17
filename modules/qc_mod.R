@@ -41,14 +41,18 @@ qc_ui <- function(id) {
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
           span("Underpowered conditions"),
-          .info_pop(
-            paste(
-              "Treatment conditions (drug × cell line × dose) with fewer cells",
-              "than the threshold above — the smallest are most at risk of",
-              "unstable differential-expression estimates. Raise the threshold",
-              "to be more conservative."
-            ),
-            title = "Underpowered conditions"
+          div(
+            class = "d-flex gap-2 align-items-center",
+            tahoe_table_columns_ui(ns("under_table")),
+            .info_pop(
+              paste(
+                "Treatment conditions (drug × cell line × dose) with fewer cells",
+                "than the threshold above — the smallest are most at risk of",
+                "unstable differential-expression estimates. Raise the threshold",
+                "to be more conservative."
+              ),
+              title = "Underpowered conditions"
+            )
           )
         ),
         tahoe_table_ui(ns("under_table"))
@@ -58,13 +62,17 @@ qc_ui <- function(id) {
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
           span("Incomplete dose series"),
-          .info_pop(
-            paste(
-              "Drug × cell-line combinations missing one or more of the three",
-              "doses (0.05 / 0.5 / 5 µM) — dose-response analyses for these are",
-              "limited."
-            ),
-            title = "Incomplete dose series"
+          div(
+            class = "d-flex gap-2 align-items-center",
+            tahoe_table_columns_ui(ns("dose_table")),
+            .info_pop(
+              paste(
+                "Drug × cell-line combinations missing one or more of the three",
+                "doses (0.05 / 0.5 / 5 µM) — dose-response analyses for these are",
+                "limited."
+              ),
+              title = "Incomplete dose series"
+            )
           )
         ),
         tahoe_table_ui(ns("dose_table"))

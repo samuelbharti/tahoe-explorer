@@ -11,35 +11,39 @@
 # (selected(), set_selected(), visible()) so a caller can drive a master-detail
 # layout (see the Drugs tab).
 
-tahoe_table_ui <- function(id, columns_label = "Columns") {
+#' The "Columns" chooser as a standalone dropdown, meant to sit in the card
+#' header (so it costs no vertical space above the table). Shares the module
+#' namespace with tahoe_table_ui()/tahoe_table_server() -- pass the same `id`.
+tahoe_table_columns_ui <- function(id, columns_label = "Columns") {
   ns <- NS(id)
-  tagList(
-    div(
-      class = "d-flex justify-content-end mb-2",
-      div(
-        class = "dropdown",
-        tags$button(
-          class = "btn btn-sm btn-outline-secondary dropdown-toggle",
-          type = "button",
-          `data-bs-toggle` = "dropdown",
-          `data-bs-auto-close` = "outside",
-          `aria-expanded` = "false",
-          columns_label
-        ),
-        div(
-          class = "dropdown-menu dropdown-menu-end p-2",
-          style = "max-height:320px; overflow-y:auto; min-width:220px;",
-          div(
-            class = "text-muted small text-uppercase mb-1",
-            style = "letter-spacing:.03em;",
-            "Show columns"
-          ),
-          uiOutput(ns("col_menu"))
-        )
-      )
+  div(
+    class = "dropdown",
+    tags$button(
+      class = "btn btn-sm btn-outline-secondary dropdown-toggle",
+      type = "button",
+      `data-bs-toggle` = "dropdown",
+      `data-bs-auto-close` = "outside",
+      `aria-expanded` = "false",
+      columns_label
     ),
-    reactable::reactableOutput(ns("table"))
+    div(
+      class = "dropdown-menu dropdown-menu-end p-2",
+      style = "max-height:320px; overflow-y:auto; min-width:220px;",
+      div(
+        class = "text-muted small text-uppercase mb-1",
+        style = "letter-spacing:.03em;",
+        "Show columns"
+      ),
+      uiOutput(ns("col_menu"))
+    )
   )
+}
+
+#' The table output. Pair it with tahoe_table_columns_ui(id) in the card header
+#' for the column chooser.
+tahoe_table_ui <- function(id) {
+  ns <- NS(id)
+  reactable::reactableOutput(ns("table"))
 }
 
 #' Table server. `data` is a reactive data frame. `columns` is a colDef list (or

@@ -135,7 +135,11 @@ subset_builder_ui <- function(id) {
         plotly::plotlyOutput(ns("live_plot"), height = 360)
       ),
       bslib::card(
-        bslib::card_header("Matched samples"),
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Matched samples"),
+          tahoe_table_columns_ui(ns("preview"))
+        ),
         tahoe_table_ui(ns("preview"))
       )
     ),

@@ -121,7 +121,11 @@ obs_explorer_ui <- function(id) {
         )
       ),
       bslib::card(
-        bslib::card_header("Filtered samples"),
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Filtered samples"),
+          tahoe_table_columns_ui(ns("sample_table"))
+        ),
         tahoe_table_ui(ns("sample_table")),
         tags$hr(),
         subset_export_ui(ns("sample_export"))
@@ -174,7 +178,11 @@ obs_explorer_ui <- function(id) {
         plotly::plotlyOutput(ns("obs_plot"), height = 320)
       ),
       bslib::card(
-        bslib::card_header("Summary table"),
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Summary table"),
+          tahoe_table_columns_ui(ns("obs_table"))
+        ),
         tahoe_table_ui(ns("obs_table")),
         tags$hr(),
         subset_export_ui(ns("obs_export"))
