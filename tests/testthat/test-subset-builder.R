@@ -93,7 +93,7 @@ test_that("the recipe embeds the selected drug and plate", {
       session$setInputs,
       .sb_inputs(drugs = target_drug, plates = target_plate)
     )
-    txt <- recipe()
+    txt <- recipe_parts()$recipe
     expect_true(nzchar(txt))
     expect_match(txt, target_drug, fixed = TRUE)
     expect_match(txt, target_plate, fixed = TRUE)
@@ -110,6 +110,44 @@ test_that("the recipe embeds the selected drug and plate", {
 test_that("an empty selection yields a full-dataset recipe note", {
   testServer(subset_builder_server, {
     do.call(session$setInputs, .sb_inputs())
-    expect_match(recipe(), "No filters selected", fixed = TRUE)
+    expect_match(recipe_parts()$recipe, "No filters selected", fixed = TRUE)
   })
+})
+
+test_that("tahoe_subset_document renders rmd / qmd / ipynb for a selection", {
+  sel <- list(drugs = tahoe_drug()$drug[[1]], doses = 0.5)
+  parts <- tahoe_subset_recipe(sel)
+  expect_false(is.null(parts$r_code))
+
+  rmd <- tahoe_subset_document(parts, "rmd")
+  expect_match(rmd, "output: html_document", fixed = TRUE)
+  expect_match(rmd, "```{r, eval=FALSE}", fixed = TRUE)
+  expect_match(rmd, "```{python, eval=FALSE}", fixed = TRUE)
+
+  qmd <- tahoe_subset_document(parts, "qmd")
+  expect_match(qmd, "format: html", fixed = TRUE)
+  expect_match(qmd, "#| eval: false", fixed = TRUE)
+
+  ipynb <- tahoe_subset_document(parts, "ipynb")
+  nb <- jsonlite::fromJSON(ipynb, simplifyVector = FALSE)
+  expect_equal(nb$nbformat, 4L)
+  expect_equal(nb$metadata$kernelspec$name, "python3")
+  code <- Filter(function(cell) identical(cell$cell_type, "code"), nb$cells)
+  expect_true(length(code) >= 1)
+  expect_match(
+    paste(unlist(code[[1]]$source), collapse = ""),
+    "read_parquet",
+    fixed = TRUE
+  )
+})
+
+test_that("tahoe_subset_document handles an empty selection", {
+  parts <- tahoe_subset_recipe(list())
+  expect_null(parts$r_code)
+  expect_match(
+    tahoe_subset_document(parts, "rmd"),
+    "No filters selected",
+    fixed = TRUE
+  )
+  expect_no_error(jsonlite::fromJSON(tahoe_subset_document(parts, "ipynb")))
 })
