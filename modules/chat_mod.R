@@ -48,6 +48,7 @@
 chat_agent_ui <- function(id) {
   ns <- NS(id)
   header <- div(
+    id = ns("tour_intro"),
     class = "p-2",
     h3("Ask the Tahoe assistant"),
     p(
@@ -111,11 +112,15 @@ chat_agent_ui <- function(id) {
         sidebar = bslib::sidebar(
           title = "Model source",
           width = 420,
-          selectInput(
-            ns("source"),
-            label = NULL,
-            choices = choices,
-            selected = default_source
+          # tour_source anchors the guided demo (see R/tour.R).
+          div(
+            id = ns("tour_source"),
+            selectInput(
+              ns("source"),
+              label = NULL,
+              choices = choices,
+              selected = default_source
+            )
           ),
           # Key form: shown for any BYOK provider, hidden for the shared default.
           conditionalPanel(
