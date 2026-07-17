@@ -203,7 +203,11 @@ drug_explorer_ui <- function(id) {
       col_widths = c(7, 5),
       bslib::card(
         full_screen = TRUE,
-        bslib::card_header("Filtered drugs"),
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Filtered drugs"),
+          tahoe_table_columns_ui(ns("tbl"))
+        ),
         div(
           class = "text-muted small px-1 pb-1",
           "Click a row to select a drug — its details, target mutations, and",
@@ -222,15 +226,20 @@ drug_explorer_ui <- function(id) {
           bslib::card_header(
             class = "d-flex justify-content-between align-items-center",
             span("Target mutations in assayed cell lines"),
-            .info_pop(
-              paste(
-                "For the selected drug, the assayed cell lines that",
-                "carry a somatic variant in one of its target genes -- the lines",
-                "over which a target-mutant vs wild-type contrast could be",
-                "designed. Restricted to lines present in the obs grid; variants",
-                "from DepMap / Cellosaurus. Empty until variant data is loaded."
-              ),
-              title = "Target mutations"
+            div(
+              class = "d-flex gap-2 align-items-center",
+              tahoe_table_columns_ui(ns("muttbl")),
+              .info_pop(
+                paste(
+                  "For the selected drug, the assayed cell lines that",
+                  "carry a somatic variant in one of its target genes -- the",
+                  "lines over which a target-mutant vs wild-type contrast could",
+                  "be designed. Restricted to lines present in the obs grid;",
+                  "variants from DepMap / Cellosaurus. Empty until variant data",
+                  "is loaded."
+                ),
+                title = "Target mutations"
+              )
             )
           ),
           uiOutput(ns("target_mut_caption")),
@@ -395,6 +404,7 @@ drug_explorer_server <- function(id) {
       "tbl",
       data = filtered,
       columns = drug_table_cols,
+      page_size = 25,
       hidden = c("canonical_smiles", "gpt-notes-approval"),
       selection = "single",
       on_click = "select",

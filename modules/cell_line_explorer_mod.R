@@ -79,7 +79,11 @@ cell_line_explorer_ui <- function(id) {
       col_widths = c(7, 5),
       bslib::card(
         full_screen = TRUE,
-        bslib::card_header("Matching cell lines"),
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Matching cell lines"),
+          tahoe_table_columns_ui(ns("table"))
+        ),
         subset_export_ui(ns("export")),
         tags$hr(),
         tahoe_table_ui(ns("table"))
@@ -106,15 +110,20 @@ cell_line_explorer_ui <- function(id) {
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
           span("Somatic variants"),
-          .info_pop(
-            paste(
-              "Somatic mutation calls for the matching cell lines. Full somatic",
-              "profiles from DepMap 24Q4 (CC BY 4.0) where available, with curated",
-              "driver variants from Cellosaurus for lines DepMap does not cover.",
-              "One row per variant; the source column shows the origin. Empty",
-              "until dev/download_variants.R is run; the demo uses synthetic data."
-            ),
-            title = "Somatic variants"
+          div(
+            class = "d-flex gap-2 align-items-center",
+            tahoe_table_columns_ui(ns("variants")),
+            .info_pop(
+              paste(
+                "Somatic mutation calls for the matching cell lines. Full",
+                "somatic profiles from DepMap 24Q4 (CC BY 4.0) where available,",
+                "with curated driver variants from Cellosaurus for lines DepMap",
+                "does not cover. One row per variant; the source column shows the",
+                "origin. Empty until dev/download_variants.R is run; the demo",
+                "uses synthetic data."
+              ),
+              title = "Somatic variants"
+            )
           )
         ),
         tahoe_table_ui(ns("variants"))

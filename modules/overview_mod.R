@@ -71,7 +71,11 @@ overview_ui <- function(id) {
               title = "Cell lines"
             )
           ),
-          uiOutput(ns("clear_filter"), inline = TRUE)
+          div(
+            class = "d-flex gap-2 align-items-center",
+            tahoe_table_columns_ui(ns("cell_line_table")),
+            uiOutput(ns("clear_filter"), inline = TRUE)
+          )
         ),
         tahoe_table_ui(ns("cell_line_table")),
         bslib::card_footer(
