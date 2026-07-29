@@ -75,24 +75,96 @@ function(input, output, session) {
   observeEvent(input$main_nav, apply_filter_state())
   observeEvent(input[["obs-view"]], apply_filter_state())
 
-  # Guided demo. Every page has a cicerone tour (R/tour.R); the navbar "Demo"
-  # button starts the tour for whichever tab is active. Guides are built and
-  # initialised once per session. The start is deferred briefly so the tab pane
-  # is laid out before cicerone measures its first target (a same-flush start
-  # can land on an element that has not finished showing).
+  # Guided demo -- one connected walkthrough across pages. Every page has a
+  # cicerone tour (R/tour.R); the navbar "Demo" button starts the tour for the
+  # page the user is on, and when a page's tour ends -- whether they click
+  # through to the end or hit "Skip" -- the next page opens and its tour begins,
+  # so the whole app is one flowing tour. (Esc closes the driver overlay without
+  # advancing, so it is the way to leave the demo.) Guides are built and
+  # initialised once per session.
   guides <- lapply(tahoe_tours(), function(build) build())
   for (g in guides) {
     g$init()
   }
-  observeEvent(input$demo_tour, {
-    guide <- guides[[input$main_nav %||% ""]]
+  # Pages that have a tour, in navbar order.
+  demo_order <- intersect(names(app_pages()), names(guides))
+  # The page whose tour is currently playing (NULL when the demo is not active).
+  demo_page <- reactiveVal(NULL)
+
+  # Open a page, make its tour's anchors visible, and start the tour. obs shows
+  # its first sub-tab; any page with a filter sidebar has it opened so sidebar
+  # anchors are on screen. The start is deferred so the pane (and sub-tab) is
+  # laid out before cicerone measures its first target.
+  start_page_demo <- function(page) {
+    guide <- guides[[page]]
     if (is.null(guide)) {
+      return(invisible())
+    }
+    demo_page(page)
+    bslib::nav_select("main_nav", page, session = session)
+    if (identical(page, "obs")) {
+      bslib::nav_select("obs-view", "samples", session = session)
+      bslib::sidebar_toggle(
+        "obs-filters_sidebar",
+        open = TRUE,
+        session = session
+      )
+    }
+    for (sb in .page_filter_sidebars[[page]]) {
+      bslib::sidebar_toggle(sb, open = TRUE, session = session)
+    }
+    later::later(function() guide$start(session = session), delay = 0.5)
+  }
+
+  # Move to the next page's tour, if any. `from_page` guards against stale events
+  # (a tour that already handed off) firing a second advance.
+  advance_demo <- function(from_page) {
+    cur <- isolate(demo_page())
+    if (is.null(cur) || !identical(cur, from_page)) {
+      return(invisible())
+    }
+    idx <- match(from_page, demo_order)
+    if (is.na(idx) || idx >= length(demo_order)) {
+      demo_page(NULL)
+      return(invisible())
+    }
+    start_page_demo(demo_order[[idx + 1L]])
+  }
+
+  observeEvent(input$demo_tour, {
+    page <- input$main_nav %||% ""
+    if (is.null(guides[[page]])) {
       showNotification(
         "No demo is available for this page yet.",
         type = "message"
       )
       return()
     }
-    later::later(function() guide$start(session = session), delay = 0.3)
+    start_page_demo(page)
+  })
+
+  # A page tour ends one of two ways. cicerone reports each "Next" click on
+  # <guide-id>_cicerone_next with a has_next flag; has_next == FALSE means the
+  # user finished the last step -> advance. "Skip" (the driver close button)
+  # has no cicerone event, so a small JS listener (see ui.R) fires
+  # input$tahoe_demo_skip; both paths hand off to the next page.
+  for (pg in names(guides)) {
+    local({
+      page <- pg
+      gid <- guides[[page]]$.__enclos_env__$private$id
+      next_input <- paste0(gid, "_cicerone_next")
+      observeEvent(input[[next_input]], {
+        val <- input[[next_input]]
+        if (!is.null(val) && isFALSE(val$has_next)) {
+          advance_demo(page)
+        }
+      })
+    })
+  }
+  observeEvent(input$tahoe_demo_skip, {
+    cur <- isolate(demo_page())
+    if (!is.null(cur)) {
+      advance_demo(cur)
+    }
   })
 }
