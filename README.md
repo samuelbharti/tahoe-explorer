@@ -1,6 +1,6 @@
 # Tahoe Explorer
 
-A lightweight Shiny app to explore [Tahoe-100M](https://huggingface.co/datasets/vevotx/Tahoe-100M)
+A lightweight Shiny app to explore [Tahoe-100M](https://huggingface.co/datasets/tahoebio/Tahoe-100M)
 metadata: filter and summarize drug, cell-line, sample, and cell-level metadata
 in quick charts, and pull a subset (filtered file + analysis recipe) to plan
 downstream analysis.

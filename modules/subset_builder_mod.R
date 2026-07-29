@@ -152,9 +152,9 @@ subset_builder_ui <- function(id) {
 }
 
 # The subset-recipe constants and helpers (.subset_obs_hf,
-# .subset_obs_bytes_per_cell, .subset_fmt, .subset_sql_vec, .subset_py_list,
-# .subset_py_num) and the recipe builder (tahoe_subset_recipe) now live in
-# R/subset_recipe.R, shared with the Chat assistant's build_subset_recipe tool.
+# .subset_obs_bytes_per_cell, .subset_fmt, .subset_sql_vec) and the recipe
+# builder (tahoe_subset_recipe) now live in R/subset_recipe.R, shared with the
+# Chat assistant's build_subset_recipe tool.
 
 # Compact format for large counts (e.g. 28.5M) so value boxes don't wrap.
 .subset_fmt_big <- function(x) {

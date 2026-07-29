@@ -22,7 +22,7 @@
 # Metric choices exposed in the obs section.
 .obs_metric_choices <- c(
   "Cell count" = "n_cells",
-  "Mean % mito" = "mean_pcnt_mito",
+  "Mean mito fraction" = "mean_pcnt_mito",
   "Mean transcript count" = "mean_tscp_count",
   "Mean gene count" = "mean_gene_count"
 )
@@ -112,7 +112,7 @@ obs_explorer_ui <- function(id) {
           plotly::plotlyOutput(ns("drug_plot"), height = 280)
         ),
         bslib::card(
-          bslib::card_header("Distribution of mean % mito"),
+          bslib::card_header("Distribution of mean mito fraction"),
           plotly::plotlyOutput(ns("mito_plot"), height = 260)
         ),
         bslib::card(
@@ -275,7 +275,7 @@ obs_explorer_server <- function(id) {
         .obs_hist(
           samples_filtered()$mean_pcnt_mito,
           tahoe_colors$blue,
-          "Mean % mito"
+          "Mean mito fraction"
         )
       )
     })
@@ -305,11 +305,9 @@ obs_explorer_server <- function(id) {
     # lazy query, so it is safe on local/fixture; for remote we defer it until
     # the section is used by wiring it to the same query trigger below.
     obs_drug_choices <- reactive({
-      res <- tahoe_obs_summary("drug", metric = "n_cells", limit = NULL)
-      if (!is.null(attr(res, "tahoe_error"))) {
-        return(character())
-      }
-      sort(res$drug)
+      # Drug names come from the small drug table, not a full scan of the
+      # 2.29 GB obs parquet.
+      sort(unique(tahoe_drug()$drug))
     })
 
     # For local/fixture sources populate the drug filter eagerly; for remote,

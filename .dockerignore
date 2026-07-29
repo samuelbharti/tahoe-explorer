@@ -7,6 +7,12 @@
 .Ruserdata
 renv/library
 renv/staging
+
+# Real Tahoe metadata — never bake into the image (only synthetic fixtures)
+data/*
+!data/fixtures/
+!data/fixtures/**
+
 dev
 docs
 tests

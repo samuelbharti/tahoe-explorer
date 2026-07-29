@@ -97,11 +97,14 @@ test_that("the recipe embeds the selected drug and plate", {
     expect_true(nzchar(txt))
     expect_match(txt, target_drug, fixed = TRUE)
     expect_match(txt, target_plate, fixed = TRUE)
-    # Reads straight from the pinned HuggingFace obs parquet revision.
+    # Reads straight from the pinned HuggingFace obs parquet revision, via duckdb
+    # (predicate pushdown) in both the R and Python snippets.
     expect_match(txt, .subset_obs_hf, fixed = TRUE)
-    expect_match(txt, "pd.read_parquet", fixed = TRUE)
+    expect_match(txt, "duckdb", fixed = TRUE)
     expect_match(txt, "scanpy", fixed = TRUE)
     expect_match(txt, "BARCODE_SUB_LIB_ID", fixed = TRUE)
+    # The DMSO_TF vehicle control is auto-included for a valid DE contrast.
+    expect_match(txt, "DMSO_TF", fixed = TRUE)
     # Includes the cell / size estimate.
     expect_match(txt, "Estimated subset", fixed = TRUE)
   })

@@ -114,9 +114,10 @@ do.call(
       )
     ),
     app_nav_panels(),
-    # Right-aligned navbar actions: a guided-demo launcher (nav_spacer pushes
-    # everything after it to the right). The server switches to the relevant
-    # tab and starts the cicerone tour (see server.R / R/tour.R).
+    # Right-aligned navbar actions (nav_spacer pushes everything after it to the
+    # right): a guided-demo launcher and a data-provenance chip. The Demo button
+    # switches to the relevant tab and starts the cicerone tour (server.R /
+    # R/tour.R); the chip shows whether the numbers are real data or fixtures.
     list(
       bslib::nav_spacer(),
       bslib::nav_item(
@@ -126,7 +127,8 @@ do.call(
           icon = icon("circle-play"),
           class = "btn-sm btn-primary my-1"
         )
-      )
+      ),
+      bslib::nav_item(tahoe_provenance_badge())
     )
   )
 )
