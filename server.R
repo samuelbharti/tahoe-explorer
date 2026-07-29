@@ -151,6 +151,8 @@ function(input, output, session) {
   for (pg in names(guides)) {
     local({
       page <- pg
+      # cicerone keeps the guide id in a private field; read it to build the
+      # `<id>_cicerone_next` input name it reports each Next click on.
       gid <- guides[[page]]$.__enclos_env__$private$id
       next_input <- paste0(gid, "_cicerone_next")
       observeEvent(input[[next_input]], {
