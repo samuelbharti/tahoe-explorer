@@ -71,9 +71,13 @@ overview_ui <- function(id) {
               title = "Cell lines"
             )
           ),
-          uiOutput(ns("clear_filter"), inline = TRUE)
+          div(
+            class = "d-flex gap-2 align-items-center",
+            tahoe_table_columns_ui(ns("cell_line_table")),
+            uiOutput(ns("clear_filter"), inline = TRUE)
+          )
         ),
-        reactable::reactableOutput(ns("cell_line_table")),
+        tahoe_table_ui(ns("cell_line_table")),
         bslib::card_footer(
           class = "text-muted small",
           "Click a row to see its driver profile below."
@@ -360,11 +364,10 @@ overview_server <- function(id) {
       df[, intersect(cols, names(df)), drop = FALSE]
     })
 
-    output$cell_line_table <- reactable::renderReactable({
-      df <- filtered_lines()
-      validate(need(nrow(df) > 0, "No cell lines for this organ."))
+    # Per-column overrides: organ swatch + DepMap link. Reads organ_colors()
+    # (a reactive), so the table re-colors when the palette changes.
+    cell_line_cols <- function(df) {
       oc <- organ_colors()
-
       col_defs <- list(
         Organ = reactable::colDef(
           html = TRUE,
@@ -403,20 +406,23 @@ overview_server <- function(id) {
           }
         )
       }
+      col_defs
+    }
 
-      tahoe_reactable(
-        df,
-        columns = col_defs,
-        selection = "single",
-        onClick = "select",
-        pagination = FALSE,
-        height = "30vh"
-      )
-    })
+    ovtbl <- tahoe_table_server(
+      "cell_line_table",
+      data = filtered_lines,
+      columns = cell_line_cols,
+      selection = "single",
+      on_click = "select",
+      pagination = FALSE,
+      height = "30vh",
+      empty_message = "No cell lines for this organ."
+    )
 
     # The cell line clicked in the table (maps the selected row to its name).
     selected_cell <- reactive({
-      idx <- reactable::getReactableState("cell_line_table", "selected")
+      idx <- ovtbl$selected()
       fl <- filtered_lines()
       if (is.null(idx) || length(idx) == 0 || idx > nrow(fl)) {
         return(NULL)

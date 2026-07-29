@@ -42,6 +42,10 @@ jobs:
             any::plotly
             any::duckdb
             any::DiagrammeR
+            any::cicerone
+            any::echarts4r
+            any::colorspace
+            loukesio/ltc-color-palettes
       - name: Lint
         run: |
           lints <- lintr::lint_dir(".")
@@ -81,6 +85,10 @@ jobs:
             any::plotly
             any::duckdb
             any::DiagrammeR
+            any::cicerone
+            any::echarts4r
+            any::colorspace
+            loukesio/ltc-color-palettes
             any::shinytest2
             any::testthat
       - name: Run tests (app smoke test)

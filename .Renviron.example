@@ -14,3 +14,33 @@
 # with "read" scope at https://huggingface.co/settings/tokens and paste it
 # below (no quotes). This file is git-ignored, so the token is never committed.
 # HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# --- AI assistant (Chat tab): Google Vertex AI + Gemini -----------------------
+# The Chat tab shows a setup panel until a project is configured AND the ellmer +
+# shinychat packages are installed. Auth is via gcloud Application Default
+# Credentials — run once, NO API key or token goes in this file:
+#   gcloud auth application-default login
+#
+# GCP project with Vertex AI enabled. REQUIRED to turn the Chat tab on.
+# Any of these names works (first non-empty wins): TAHOE_VERTEX_PROJECT,
+# VERTEX_PROJECT_ID, GOOGLE_CLOUD_PROJECT, GCLOUD_PROJECT.
+# TAHOE_VERTEX_PROJECT=my-gcp-project-id
+# Vertex region. Any of TAHOE_VERTEX_LOCATION, VERTEX_LOCATION,
+# GOOGLE_CLOUD_LOCATION works; defaults to us-central1.
+# TAHOE_VERTEX_LOCATION=us-central1
+# Gemini model id. Defaults to gemini-2.5-flash.
+# TAHOE_VERTEX_MODEL=gemini-2.5-flash
+# Sampling temperature (0-2). Defaults to 0.2 for factual answers.
+# TAHOE_AGENT_TEMPERATURE=0.2
+# Set to 1 to force the Chat tab off even when the above are set (the test suite
+# sets this).
+# TAHOE_AGENT_DISABLE=1
+#
+# Bring your own key (BYOK): in addition to (or instead of) the shared Vertex
+# assistant above, users can paste their own provider key in the chat sidebar.
+# The key is held only in their browser session -- never stored or logged -- and
+# runs on their own account. BYOK is ON by default whenever the packages are
+# installed; set to 0 to remove the option.
+# TAHOE_AGENT_BYOK=1
+# Which BYOK providers to offer (comma list; unknown names are ignored).
+# TAHOE_AGENT_BYOK_PROVIDERS=gemini,openai,anthropic

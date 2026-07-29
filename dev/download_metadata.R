@@ -10,9 +10,15 @@
 #
 # Override the destination with TAHOE_METADATA_DIR (defaults to "data").
 
-base_url <- paste0(
-  "https://huggingface.co/datasets/tahoebio/Tahoe-100M/",
-  "resolve/main/metadata/"
+# Pinned dataset revision (keep in sync with .tahoe_dataset_revision in
+# R/data.R) so the downloaded metadata is reproducible, not whatever the mutable
+# default branch happens to hold today.
+dataset_repo <- "tahoebio/Tahoe-100M"
+dataset_revision <- "2dc57900b7981cfcf5e211527169a0b006546a95"
+base_url <- sprintf(
+  "https://huggingface.co/datasets/%s/resolve/%s/metadata/",
+  dataset_repo,
+  dataset_revision
 )
 
 small_files <- c(
@@ -118,8 +124,10 @@ if (requireNamespace("duckdb", quietly = TRUE)) {
             )
           )
         }
-        src <- paste0(
-          "hf://datasets/tahoebio/Tahoe-100M/metadata/",
+        src <- sprintf(
+          "hf://datasets/%s@%s/metadata/%s",
+          dataset_repo,
+          dataset_revision,
           obs_file
         )
         cat("  (scanning remote obs; this takes ~30s)\n")
@@ -130,8 +138,16 @@ if (requireNamespace("duckdb", quietly = TRUE)) {
           paste0(
             "COPY (SELECT drug, cell_name, plate, TRY_CAST(regexp_extract(",
             "drugname_drugconc, ',\\s*([0-9.eE+-]+)\\s*,', 1) AS DOUBLE) AS ",
-            "conc, count(*) AS n_cells FROM read_parquet('%s') GROUP BY ",
-            "1, 2, 3, 4) TO '%s' (FORMAT PARQUET)"
+            "conc, count(*) AS n_cells, ",
+            "count(*) FILTER (WHERE pass_filter = 'full') AS n_full, ",
+            "count(*) FILTER (WHERE phase = 'G1') AS n_g1, ",
+            "count(*) FILTER (WHERE phase = 'S') AS n_s, ",
+            "count(*) FILTER (WHERE phase = 'G2M') AS n_g2m, ",
+            "sum(pcnt_mito) AS sum_pcnt_mito, ",
+            "sum(gene_count) AS sum_gene_count, ",
+            "sum(tscp_count) AS sum_tscp_count ",
+            "FROM read_parquet('%s') GROUP BY 1, 2, 3, 4) TO '%s' ",
+            "(FORMAT PARQUET)"
           ),
           src,
           grid_dest

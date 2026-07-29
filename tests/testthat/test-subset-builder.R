@@ -93,16 +93,13 @@ test_that("the recipe embeds the selected drug and plate", {
       session$setInputs,
       .sb_inputs(drugs = target_drug, plates = target_plate)
     )
-    txt <- recipe()
+    txt <- recipe_parts()$recipe
     expect_true(nzchar(txt))
     expect_match(txt, target_drug, fixed = TRUE)
     expect_match(txt, target_plate, fixed = TRUE)
-    # Reads straight from the public HuggingFace obs parquet.
-    expect_match(
-      txt,
-      "hf://datasets/tahoebio/Tahoe-100M/metadata/obs_metadata.parquet",
-      fixed = TRUE
-    )
+    # Reads straight from the pinned HuggingFace obs parquet revision, via duckdb
+    # (predicate pushdown) in both the R and Python snippets.
+    expect_match(txt, .subset_obs_hf, fixed = TRUE)
     expect_match(txt, "duckdb", fixed = TRUE)
     expect_match(txt, "scanpy", fixed = TRUE)
     expect_match(txt, "BARCODE_SUB_LIB_ID", fixed = TRUE)
@@ -116,6 +113,61 @@ test_that("the recipe embeds the selected drug and plate", {
 test_that("an empty selection yields a full-dataset recipe note", {
   testServer(subset_builder_server, {
     do.call(session$setInputs, .sb_inputs())
-    expect_match(recipe(), "No filters selected", fixed = TRUE)
+    expect_match(recipe_parts()$recipe, "No filters selected", fixed = TRUE)
   })
+})
+
+test_that("tahoe_subset_document renders single-language docs per format", {
+  sel <- list(drugs = tahoe_drug()$drug[[1]], doses = 0.5)
+  parts <- tahoe_subset_recipe(sel)
+  expect_false(is.null(parts$r_code))
+  expect_false(is.null(parts$py_code))
+
+  # R Markdown, R language: an R chunk only, with setup + HF-token guidance.
+  rmd_r <- tahoe_subset_document(parts, "rmd", "r")
+  expect_match(rmd_r, "output: html_document", fixed = TRUE)
+  expect_match(rmd_r, "```{r, eval=FALSE}", fixed = TRUE)
+  expect_false(grepl("```{python", rmd_r, fixed = TRUE))
+  expect_match(rmd_r, "renv::init()", fixed = TRUE)
+  expect_match(rmd_r, "HF_TOKEN", fixed = TRUE)
+
+  # Quarto, Python language: a python chunk only, with pip/venv guidance.
+  qmd_py <- tahoe_subset_document(parts, "qmd", "python")
+  expect_match(qmd_py, "format: html", fixed = TRUE)
+  expect_match(qmd_py, "```{python}", fixed = TRUE)
+  expect_match(qmd_py, "#| eval: false", fixed = TRUE)
+  expect_false(grepl("```{r", qmd_py, fixed = TRUE))
+  expect_match(qmd_py, "pip install", fixed = TRUE)
+
+  # Jupyter uses the matching kernel: IRkernel for R, python3 for Python.
+  nb_r <- jsonlite::fromJSON(
+    tahoe_subset_document(parts, "ipynb", "r"),
+    simplifyVector = FALSE
+  )
+  expect_equal(nb_r$nbformat, 4L)
+  expect_equal(nb_r$metadata$kernelspec$name, "ir")
+
+  nb_py <- jsonlite::fromJSON(
+    tahoe_subset_document(parts, "ipynb", "python"),
+    simplifyVector = FALSE
+  )
+  expect_equal(nb_py$metadata$kernelspec$name, "python3")
+  code <- Filter(function(cell) identical(cell$cell_type, "code"), nb_py$cells)
+  expect_true(length(code) >= 1)
+  expect_match(
+    paste(unlist(code[[1]]$source), collapse = ""),
+    "read_parquet",
+    fixed = TRUE
+  )
+})
+
+test_that("tahoe_subset_document handles an empty selection", {
+  parts <- tahoe_subset_recipe(list())
+  expect_null(parts$r_code)
+  expect_match(
+    tahoe_subset_document(parts, "rmd"),
+    "No filters selected",
+    fixed = TRUE
+  )
+  expect_no_error(jsonlite::fromJSON(tahoe_subset_document(parts, "ipynb")))
 })

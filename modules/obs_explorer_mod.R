@@ -16,7 +16,7 @@
   "Cell line" = "cell_line",
   "Plate" = "plate",
   "Cell-cycle phase" = "phase",
-  "Passes QC filter" = "pass_filter"
+  "QC filter tier" = "pass_filter"
 )
 
 # Metric choices exposed in the obs section.
@@ -121,8 +121,12 @@ obs_explorer_ui <- function(id) {
         )
       ),
       bslib::card(
-        bslib::card_header("Filtered samples"),
-        reactable::reactableOutput(ns("sample_table")),
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Filtered samples"),
+          tahoe_table_columns_ui(ns("sample_table"))
+        ),
+        tahoe_table_ui(ns("sample_table")),
         tags$hr(),
         subset_export_ui(ns("sample_export"))
       )
@@ -166,15 +170,20 @@ obs_explorer_ui <- function(id) {
             class = "btn-warning btn-sm",
             icon = icon("play")
           )
-        }
+        },
+        uiOutput(ns("obs_status"))
       ),
       bslib::card(
         bslib::card_header("Summary"),
         plotly::plotlyOutput(ns("obs_plot"), height = 320)
       ),
       bslib::card(
-        bslib::card_header("Summary table"),
-        reactable::reactableOutput(ns("obs_table")),
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Summary table"),
+          tahoe_table_columns_ui(ns("obs_table"))
+        ),
+        tahoe_table_ui(ns("obs_table")),
         tags$hr(),
         subset_export_ui(ns("obs_export"))
       )
@@ -281,9 +290,7 @@ obs_explorer_server <- function(id) {
       )
     })
 
-    output$sample_table <- reactable::renderReactable({
-      tahoe_reactable(samples_filtered())
-    })
+    tahoe_table_server("sample_table", data = samples_filtered)
 
     subset_export_server(
       "sample_export",
@@ -336,11 +343,44 @@ obs_explorer_server <- function(id) {
       )
     }
 
-    obs_summary <- if (identical(source_type, "remote")) {
+    # When async is enabled AND the source is remote, run the heavy summary in a
+    # background worker so it never blocks the main process (triple-gated:
+    # TAHOE_ASYNC + remote + explicit "Run query"). Otherwise keep the original
+    # synchronous behaviour exactly. The drug-choices helper above stays
+    # synchronous -- it fires once on first run; async-ing it too is a follow-up.
+    use_async_obs <- .tahoe_async_enabled() && identical(source_type, "remote")
+    obs_task <- if (use_async_obs) tahoe_make_obs_task() else NULL
+
+    obs_summary <- if (use_async_obs) {
+      observeEvent(
+        input$run,
+        {
+          req(input$obs_group, input$obs_metric)
+          filters <- list()
+          if (length(input$obs_drug) > 0) {
+            filters$drug <- input$obs_drug
+          }
+          obs_task$invoke(input$obs_group, filters, input$obs_metric, 100)
+        },
+        ignoreNULL = TRUE
+      )
+      reactive(obs_task$result())
+    } else if (identical(source_type, "remote")) {
       eventReactive(input$run, obs_query(), ignoreNULL = TRUE)
     } else {
       reactive(obs_query())
     }
+
+    # Background-query progress hint (async remote only; NULL otherwise).
+    output$obs_status <- renderUI({
+      if (is.null(obs_task) || !identical(obs_task$status(), "running")) {
+        return(NULL)
+      }
+      div(
+        class = "text-muted small mt-2",
+        "Running query in the background…"
+      )
+    })
 
     # Tidy frame for plotting/tabling: friendly, stable column names and a
     # graceful message when the underlying query failed.
@@ -386,9 +426,7 @@ obs_explorer_server <- function(id) {
       tahoe_plotly(.obs_bar(obs_plot_df(), tahoe_colors$sand, metric_label))
     })
 
-    output$obs_table <- reactable::renderReactable({
-      tahoe_reactable(obs_result())
-    })
+    tahoe_table_server("obs_table", data = obs_result)
 
     subset_export_server(
       "obs_export",

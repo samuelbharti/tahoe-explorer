@@ -14,7 +14,9 @@ coverage_ui <- function(id) {
   ns <- NS(id)
   bslib::layout_sidebar(
     sidebar = bslib::sidebar(
-      width = 300,
+      width = 250,
+      gap = "0.4rem",
+      padding = "0.6rem",
       title = "Matrix",
       selectizeInput(
         ns("drugs"),

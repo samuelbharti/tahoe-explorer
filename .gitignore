@@ -7,6 +7,12 @@
 # Local config/secrets
 .Renviron
 
+# Google Cloud / Vertex credentials — never commit; the app uses gcloud ADC
+application_default_credentials.json
+gha-creds-*.json
+*-sa.json
+*-service-account.json
+
 # renv local library/cache (keep renv.lock tracked)
 renv/library/
 renv/staging/

@@ -276,6 +276,28 @@ about_ui <- function(id) {
           target = "_blank",
           rel = "noopener",
           "Preprint"
+        ),
+        " · ",
+        tags$a(
+          href = "https://depmap.org/portal/",
+          target = "_blank",
+          rel = "noopener",
+          "DepMap 24Q4"
+        ),
+        " · ",
+        tags$a(
+          href = "https://www.cellosaurus.org",
+          target = "_blank",
+          rel = "noopener",
+          "Cellosaurus"
+        ),
+        " (cell-line somatic variants, both CC BY 4.0)"
+      ),
+      tags$p(
+        class = "small text-muted mb-0 mt-2",
+        sprintf(
+          "Dataset pinned to Tahoe-100M revision %s for reproducibility.",
+          substr(tahoe_dataset_pin()$revision, 1, 7)
         )
       )
     )

@@ -24,7 +24,15 @@
 subset_builder_ui <- function(id) {
   ns <- NS(id)
 
-  grid <- tryCatch(tahoe_cell_grid(), error = function(e) NULL)
+  # In async mode the grid may be a slow remote build, so we do NOT touch it at
+  # UI-construction time (that would block startup for every session); the server
+  # populates the grid-derived choices once the background task resolves. In the
+  # default synchronous mode this reads the fast local/fixture grid as before.
+  grid <- if (.tahoe_async_enabled()) {
+    NULL
+  } else {
+    tryCatch(tahoe_cell_grid(), error = function(e) NULL)
+  }
   lines <- tryCatch(tahoe_cell_line(), error = function(e) NULL)
   samples <- tryCatch(tahoe_sample(), error = function(e) NULL)
 
@@ -127,8 +135,12 @@ subset_builder_ui <- function(id) {
         plotly::plotlyOutput(ns("live_plot"), height = 360)
       ),
       bslib::card(
-        bslib::card_header("Matched samples"),
-        reactable::reactableOutput(ns("preview"))
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Matched samples"),
+          tahoe_table_columns_ui(ns("preview"))
+        ),
+        tahoe_table_ui(ns("preview"))
       )
     ),
     bslib::card(
@@ -139,18 +151,10 @@ subset_builder_ui <- function(id) {
   )
 }
 
-# Public obs parquet on HuggingFace — the source the generated code reads from,
-# so the snippets run without pre-downloading anything.
-.subset_obs_hf <- "hf://datasets/tahoebio/Tahoe-100M/metadata/obs_metadata.parquet"
-
-# Approximate compressed bytes per cell in the obs parquet (~2.29 GB / 100.6M
-# cells), used for the subset size estimate.
-.subset_obs_bytes_per_cell <- 23
-
-# Format an integer for a value box, with an em dash for NA / unknown.
-.subset_fmt <- function(x) {
-  if (length(x) != 1 || is.na(x)) "—" else format(x, big.mark = ",")
-}
+# The subset-recipe constants and helpers (.subset_obs_hf,
+# .subset_obs_bytes_per_cell, .subset_fmt, .subset_sql_vec) and the recipe
+# builder (tahoe_subset_recipe) now live in R/subset_recipe.R, shared with the
+# Chat assistant's build_subset_recipe tool.
 
 # Compact format for large counts (e.g. 28.5M) so value boxes don't wrap.
 .subset_fmt_big <- function(x) {
@@ -160,23 +164,64 @@ subset_builder_ui <- function(id) {
   scales::label_number(accuracy = 0.1, scale_cut = scales::cut_short_scale())(x)
 }
 
-# Render a character vector as a single-quoted SQL IN list, e.g. ('a', 'b').
-.subset_sql_vec <- function(x) {
-  vals <- paste(
-    vapply(
-      x,
-      function(v) paste0("'", gsub("'", "''", v, fixed = TRUE), "'"),
-      character(1)
-    ),
-    collapse = ", "
-  )
-  paste0("(", vals, ")")
-}
-
 subset_builder_server <- function(id) {
   moduleServer(id, function(input, output, session) {
-    grid <- reactive(tahoe_cell_grid())
     driver_lines <- reactive(tahoe_cell_line())
+
+    if (.tahoe_async_enabled()) {
+      # Build the grid in a background worker so a slow remote scan never blocks
+      # the main process. Reading $result() suspends dependent reactives (like
+      # req()) until the build finishes, then yields the same tibble the sync
+      # path returns; a worker failure re-throws here and surfaces as an error.
+      grid_task <- tahoe_make_grid_task()
+      grid_task$invoke()
+      grid <- reactive(grid_task$result())
+
+      # The UI built the grid-derived selectize inputs empty (see the UI note);
+      # populate them once the grid resolves. tahoe_cell_line() is a small local
+      # table, so the driver choices stay synchronous. Plate choices come from
+      # tahoe_sample() and are already populated by the UI in both modes.
+      observe({
+        g <- grid()
+        assayed <- unique(g$cell_name)
+        dl <- driver_lines()
+        driver_choices <- if (
+          all(c("cell_name", "Driver_Gene_Symbol") %in% names(dl))
+        ) {
+          .subset_choices(
+            dl[dl$cell_name %in% assayed, , drop = FALSE],
+            "Driver_Gene_Symbol"
+          )
+        } else {
+          character()
+        }
+        updateSelectizeInput(
+          session,
+          "organs",
+          choices = .subset_choices(
+            g,
+            "organ"
+          )
+        )
+        updateSelectizeInput(session, "drivers", choices = driver_choices)
+        updateSelectizeInput(session, "cell_lines", choices = sort(assayed))
+        updateSelectizeInput(
+          session,
+          "drugs",
+          choices = .subset_choices(
+            g,
+            "drug"
+          )
+        )
+        updateSelectizeInput(
+          session,
+          "doses",
+          choices = sort(unique(g$conc[!is.na(g$conc)]))
+        )
+      })
+    } else {
+      grid <- reactive(tahoe_cell_grid())
+    }
 
     sel_organs <- reactive(input$organs %||% character())
     sel_drivers <- reactive(input$drivers %||% character())
@@ -188,29 +233,24 @@ subset_builder_server <- function(id) {
     })
     sel_plates <- reactive(input$plates %||% character())
 
+    # The current selection across the six subset dimensions, in the plain-list
+    # shape the shared recipe logic (R/subset_recipe.R) expects.
+    selection <- reactive(
+      list(
+        organs = sel_organs(),
+        drivers = sel_drivers(),
+        cell_lines = sel_cell_lines(),
+        drugs = sel_drugs(),
+        doses = sel_doses(),
+        plates = sel_plates()
+      )
+    )
+
     # Cell lines implied by the tissue + driver + explicit-cell-line filters,
     # restricted to the assayed lines that actually appear in the data.
-    matched_cell_names <- reactive({
-      g <- grid()
-      names_out <- unique(g$cell_name)
-      if (length(sel_organs()) > 0 && "organ" %in% names(g)) {
-        names_out <- intersect(
-          names_out,
-          unique(g$cell_name[g$organ %in% sel_organs()])
-        )
-      }
-      if (length(sel_drivers()) > 0) {
-        dl <- driver_lines()
-        if (all(c("cell_name", "Driver_Gene_Symbol") %in% names(dl))) {
-          hit <- unique(dl$cell_name[dl$Driver_Gene_Symbol %in% sel_drivers()])
-          names_out <- intersect(names_out, hit)
-        }
-      }
-      if (length(sel_cell_lines()) > 0) {
-        names_out <- intersect(names_out, sel_cell_lines())
-      }
-      names_out
-    })
+    matched_cell_names <- reactive(
+      tahoe_subset_matched_lines(selection(), grid(), driver_lines())
+    )
 
     # Keep the cell-line picker in sync with the tissue / driver filters.
     observeEvent(
@@ -347,9 +387,7 @@ subset_builder_server <- function(id) {
       tahoe_plotly(p)
     })
 
-    output$preview <- reactable::renderReactable({
-      tahoe_reactable(matched_samples(), page_size = 8)
-    })
+    tahoe_table_server("preview", data = matched_samples, page_size = 8)
 
     # Estimated size of the subset: cells (from the grid), matched samples, and
     # the approximate obs metadata to scan. Expression is separate and larger.
@@ -379,121 +417,197 @@ subset_builder_server <- function(id) {
       )
     })
 
-    # Copy-paste recipe reproducing the selection straight from HuggingFace. The
-    # tissue / driver filters are resolved to their concrete cell_name set.
-    recipe <- reactive({
-      drugs <- sel_drugs()
-      doses <- sel_doses()
-      plates <- sel_plates()
-      # Only constrain cell lines when the resolved set is a strict subset.
-      all_lines <- unique(grid()$cell_name)
-      lines <- matched_cell_names()
-      constrain_lines <- length(lines) > 0 &&
-        length(lines) < length(all_lines)
-
-      if (
-        length(drugs) == 0 &&
-          length(doses) == 0 &&
-          length(plates) == 0 &&
-          !constrain_lines
-      ) {
-        return(paste(
-          "No filters selected: this recipe would return the full dataset.",
-          "Pick a tissue, driver, cell line, drug, dose, or plate to build a",
-          "reproducible subset predicate."
-        ))
-      }
-
-      r_where <- character()
-      if (length(drugs) > 0) {
-        # Include the DMSO_TF vehicle control so the pulled subset has a
-        # control arm — perturbation DE is treated-vs-control.
-        drugs_ctrl <- unique(c(drugs, "DMSO_TF"))
-        r_where <- c(
-          r_where,
-          sprintf("drug IN %s", .subset_sql_vec(drugs_ctrl))
-        )
-      }
-      if (constrain_lines) {
-        r_where <- c(
-          r_where,
-          sprintf("cell_name IN %s", .subset_sql_vec(lines))
-        )
-      }
-      if (length(plates) > 0) {
-        r_where <- c(r_where, sprintf("plate IN %s", .subset_sql_vec(plates)))
-      }
-      if (length(doses) > 0) {
-        # Keep the DMSO vehicle (dose 0) alongside the chosen doses.
-        doses_ctrl <- sort(unique(c(doses, 0)))
-        r_where <- c(
-          r_where,
-          sprintf(
-            paste0(
-              "TRY_CAST(regexp_extract(drugname_drugconc, ",
-              "',\\s*([0-9.eE+-]+)\\s*,', 1) AS DOUBLE) IN (%s)"
-            ),
-            paste(format(doses_ctrl, trim = TRUE), collapse = ", ")
-          )
-        )
-      }
-
-      r_predicate <- paste(r_where, collapse = "\n    AND ")
-
-      est <- estimate()
-      header <- paste(
-        "# ── Estimated subset ─────────────────────────────────────────",
-        sprintf(
-          "# ~%s cells across %s samples · ~%s MB of obs metadata to scan.",
-          .subset_fmt(est$cells),
-          .subset_fmt(est$samples),
-          .subset_fmt(est$obs_mb)
-        ),
-        "# The expression matrix is downloaded separately and is larger.",
-        "# DMSO_TF vehicle controls (dose 0) are included automatically.",
-        sprintf("# Source: %s", .subset_obs_hf),
-        sep = "\n"
+    # Copy-paste recipe reproducing the selection straight from HuggingFace,
+    # built by the shared recipe logic in R/subset_recipe.R (also used by the
+    # Chat assistant's build_subset_recipe tool). The tissue / driver filters are
+    # resolved to their concrete cell_name set inside tahoe_subset_recipe().
+    recipe_parts <- reactive(
+      tahoe_subset_recipe(
+        selection(),
+        grid(),
+        driver_lines(),
+        tahoe_sample()
       )
-      r_snippet <- paste(
-        "## R (duckdb) — pull the subset's cell-level metadata ---------",
-        "library(duckdb); library(DBI)",
-        "con <- dbConnect(duckdb())",
-        'dbExecute(con, "INSTALL httpfs; LOAD httpfs;")',
-        "obs <- dbGetQuery(con, \"",
-        "  SELECT *",
-        sprintf("  FROM read_parquet('%s')", .subset_obs_hf),
-        sprintf("  WHERE %s", r_predicate),
-        "\")",
-        "dbDisconnect(con, shutdown = TRUE)",
-        sep = "\n"
-      )
-      py_snippet <- paste(
-        "## Python (duckdb) — pull the subset's cell-level metadata -----",
-        "import duckdb",
-        "con = duckdb.connect()",
-        'con.execute("INSTALL httpfs; LOAD httpfs;")',
-        'obs = con.execute("""',
-        "  SELECT *",
-        sprintf("  FROM read_parquet('%s')", .subset_obs_hf),
-        sprintf("  WHERE %s", r_predicate),
-        '""").df()',
-        'cells = obs["BARCODE_SUB_LIB_ID"]',
-        "",
-        "# Point `adata` at the Tahoe-100M expression AnnData, then keep",
-        "# only these cells (obs_names are the BARCODE_SUB_LIB_ID values):",
-        "# import scanpy as sc",
-        '# adata = sc.read_h5ad("<tahoe_expression.h5ad>", backed="r")',
-        "# adata = adata[adata.obs_names.isin(cells)].to_memory()",
-        sep = "\n"
-      )
-      paste(header, "", r_snippet, "", py_snippet, sep = "\n")
-    })
+    )
 
     subset_export_server(
       "export",
       data_reactive = matched_samples,
       file_stem = "tahoe_subset",
-      recipe = recipe
+      recipe_parts = recipe_parts
+    )
+
+    # --- Chat-assistant bridge -------------------------------------------------
+    # Expose the live selection (read) and a validated setter (drive) so the Chat
+    # assistant's get_subset_selection / set_subset_selection tools can inspect
+    # and change what the user has picked here. Registered into session$userData
+    # (shared across module sessions); see R/agent_bridge.R. These closures are
+    # called from the chat module's async tool call, so every reactive read is
+    # isolated and every input write targets THIS module's session.
+
+    # Estimated cells/samples for an arbitrary selection list, via the shared
+    # recipe logic (the same numbers the Export card shows). NA on any failure.
+    bridge_counts <- function(sel) {
+      r <- tryCatch(
+        isolate(tahoe_subset_recipe(
+          sel,
+          grid(),
+          driver_lines(),
+          tahoe_sample()
+        )),
+        error = function(e) NULL
+      )
+      list(
+        cells = if (is.null(r)) NA_integer_ else r$cells,
+        samples = if (is.null(r)) NA_integer_ else r$samples
+      )
+    }
+
+    bridge_get <- function() {
+      sel <- isolate(selection())
+      cnt <- bridge_counts(sel)
+      list(
+        available = TRUE,
+        selection = sel,
+        estimated_cells = cnt$cells,
+        estimated_samples = cnt$samples
+      )
+    }
+
+    # Apply a partial selection request: NULL for a dimension leaves it untouched,
+    # any vector (including empty) replaces it. Values outside the dataset are
+    # dropped and reported in `ignored`, so the LLM can correct itself.
+    bridge_set <- function(request) {
+      g <- isolate(tryCatch(grid(), error = function(e) NULL))
+      dl <- isolate(tryCatch(driver_lines(), error = function(e) {
+        tahoe_cell_line()
+      }))
+      cur <- isolate(selection())
+      if (is.null(g)) {
+        g <- data.frame()
+      }
+      assayed <- if ("cell_name" %in% names(g)) {
+        unique(g$cell_name)
+      } else {
+        character()
+      }
+      samples <- tryCatch(tahoe_sample(), error = function(e) NULL)
+
+      # Valid value domain per dimension, mirroring the UI's choice construction.
+      dom <- list(
+        organs = .subset_choices(g, "organ"),
+        drivers = if (
+          all(c("cell_name", "Driver_Gene_Symbol") %in% names(dl))
+        ) {
+          .subset_choices(
+            dl[dl$cell_name %in% assayed, , drop = FALSE],
+            "Driver_Gene_Symbol"
+          )
+        } else {
+          character()
+        },
+        cell_lines = sort(assayed),
+        drugs = .subset_choices(g, "drug"),
+        doses = sort(unique(g$conc[!is.na(g$conc)])),
+        plates = if (!is.null(samples) && "plate" %in% names(samples)) {
+          sort(unique(as.character(samples$plate)))
+        } else {
+          character()
+        }
+      )
+
+      applied <- cur
+      ignored <- list()
+      # Keep only the requested values that exist in the dimension's domain;
+      # record the rest. Returns NULL (leave untouched) when not provided.
+      validate_dim <- function(name, numeric = FALSE) {
+        vals <- request[[name]]
+        if (is.null(vals)) {
+          return(NULL)
+        }
+        vals <- if (numeric) {
+          suppressWarnings(as.numeric(unlist(vals)))
+        } else {
+          as.character(unlist(vals))
+        }
+        vals <- vals[!is.na(vals)]
+        good <- unique(vals[vals %in% dom[[name]]])
+        bad <- unique(vals[!(vals %in% dom[[name]])])
+        if (length(bad) > 0) {
+          ignored[[name]] <<- as.character(bad)
+        }
+        good
+      }
+
+      for (nm in c("organs", "drivers", "drugs", "doses", "plates")) {
+        good <- validate_dim(nm, numeric = identical(nm, "doses"))
+        if (!is.null(good)) {
+          applied[[nm]] <- good
+        }
+      }
+
+      # Cell lines are further constrained by the RESULTING tissue / driver
+      # filters (as the UI narrows them). Compute that choice set, keep only the
+      # requested lines within it, and report any that fall outside.
+      cl_req <- validate_dim("cell_lines")
+      cl_choices <- sort(assayed)
+      if (length(applied$organs) > 0 && "organ" %in% names(g)) {
+        cl_choices <- sort(unique(g$cell_name[g$organ %in% applied$organs]))
+      }
+      if (
+        length(applied$drivers) > 0 &&
+          all(c("cell_name", "Driver_Gene_Symbol") %in% names(dl))
+      ) {
+        hit <- unique(dl$cell_name[dl$Driver_Gene_Symbol %in% applied$drivers])
+        cl_choices <- intersect(cl_choices, hit)
+      }
+      if (!is.null(cl_req)) {
+        dropped <- setdiff(cl_req, cl_choices)
+        if (length(dropped) > 0) {
+          ignored$cell_lines <- unique(c(ignored$cell_lines, dropped))
+        }
+        applied$cell_lines <- intersect(cl_req, cl_choices)
+      } else {
+        # Not requested, but the filters above may have narrowed the valid set;
+        # keep the current lines that still qualify (matches the sync observer).
+        applied$cell_lines <- intersect(applied$cell_lines, cl_choices)
+      }
+
+      # Push each dimension to its input. Filters first, then cell_lines with its
+      # recomputed choice set, so the tissue/driver sync observer -- when it fires
+      # on the organ/driver change -- re-applies the SAME narrowed set idempotently.
+      updateSelectizeInput(session, "organs", selected = applied$organs)
+      updateSelectizeInput(session, "drivers", selected = applied$drivers)
+      updateSelectizeInput(session, "drugs", selected = applied$drugs)
+      updateSelectizeInput(
+        session,
+        "doses",
+        selected = as.character(applied$doses)
+      )
+      updateSelectizeInput(session, "plates", selected = applied$plates)
+      updateSelectizeInput(
+        session,
+        "cell_lines",
+        choices = cl_choices,
+        selected = applied$cell_lines
+      )
+
+      cnt <- bridge_counts(applied)
+      out <- list(
+        applied = TRUE,
+        selection = applied,
+        estimated_cells = cnt$cells,
+        estimated_samples = cnt$samples
+      )
+      if (length(ignored) > 0) {
+        out$ignored <- ignored
+      }
+      out
+    }
+
+    tahoe_register_subset_bridge(
+      session,
+      list(get = bridge_get, set = bridge_set)
     )
 
     list(matched_samples = matched_samples, grid_filtered = grid_filtered)

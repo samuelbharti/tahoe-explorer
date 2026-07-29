@@ -36,11 +36,27 @@
   mean_mread_count = "avg(mread_count)"
 )
 
-# Remote location of the cell-level obs file (used only when opted in). Uses
-# duckdb's hf:// protocol, which works anonymously for this public dataset and
-# picks up a HuggingFace token (see .tahoe_hf_token) for authenticated access.
-.tahoe_obs_remote_url <- paste0(
-  "hf://datasets/tahoebio/Tahoe-100M/metadata/obs_metadata.parquet"
+# Pinned Tahoe-100M dataset revision (HuggingFace commit SHA) for reproducibility.
+# The default branch is mutable: an upstream re-upload would otherwise silently
+# change every obs-derived number and any recipe handed off downstream. Bump this
+# deliberately when adopting a newer dataset release (also update the copies in
+# dev/download_metadata.R, which is a standalone script and cannot see this).
+.tahoe_dataset_repo <- "tahoebio/Tahoe-100M"
+.tahoe_dataset_revision <- "2dc57900b7981cfcf5e211527169a0b006546a95"
+
+#' The pinned dataset repo + revision, for display (About) and recipe headers.
+tahoe_dataset_pin <- function() {
+  list(repo = .tahoe_dataset_repo, revision = .tahoe_dataset_revision)
+}
+
+# Remote location of the cell-level obs file (used only when opted in), pinned to
+# the revision above. Uses duckdb's hf:// protocol, which works anonymously for
+# this public dataset and picks up a HuggingFace token (see .tahoe_hf_token) for
+# authenticated access.
+.tahoe_obs_remote_url <- sprintf(
+  "hf://datasets/%s@%s/metadata/obs_metadata.parquet",
+  .tahoe_dataset_repo,
+  .tahoe_dataset_revision
 )
 
 #' HuggingFace access token from the environment, or "" if unset. Checked in
@@ -82,6 +98,27 @@ tahoe_table_path <- function(name) {
   )
 }
 
+# Apply optional duckdb resource caps for shared/hosted deployments, so one heavy
+# query cannot exhaust the host. No-ops unless the env vars are set, so local and
+# CI behaviour is unchanged. TAHOE_DUCKDB_MEMORY_LIMIT (e.g. "4GB"),
+# TAHOE_DUCKDB_THREADS (e.g. "2"). Best-effort (wrapped in try()).
+.tahoe_apply_limits <- function(con) {
+  mem <- Sys.getenv("TAHOE_DUCKDB_MEMORY_LIMIT", unset = "")
+  if (nzchar(mem)) {
+    try(
+      DBI::dbExecute(con, sprintf("SET memory_limit=%s", .tahoe_quote(mem))),
+      silent = TRUE
+    )
+  }
+  threads <- suppressWarnings(as.integer(
+    Sys.getenv("TAHOE_DUCKDB_THREADS", unset = "")
+  ))
+  if (!is.na(threads) && threads > 0) {
+    try(DBI::dbExecute(con, sprintf("SET threads=%d", threads)), silent = TRUE)
+  }
+  invisible(con)
+}
+
 #' Cached duckdb connection for the app's lifetime.
 tahoe_con <- function() {
   if (is.null(.tahoe_cache$con) || !DBI::dbIsValid(.tahoe_cache$con)) {
@@ -90,6 +127,7 @@ tahoe_con <- function() {
     # later remote query re-loads it instead of assuming the old connection's
     # state.
     .tahoe_cache$httpfs <- FALSE
+    .tahoe_apply_limits(.tahoe_cache$con)
   }
   .tahoe_cache$con
 }
@@ -129,6 +167,59 @@ tahoe_cell_line <- function() tahoe_table("cell_line_metadata")
 tahoe_sample <- function() tahoe_table("sample_metadata")
 tahoe_gene <- function() tahoe_table("gene_metadata")
 
+#' Per cell-line somatic variant calls (one row per variant) from external
+#' sources -- DepMap full somatic profiles plus a Cellosaurus curated-driver
+#' fallback -- carrying a `source` column and keyed on `cell_name`. Resolves
+#' data/cell_line_variants.parquet if present, else the synthetic fixture, so it
+#' stays offline-safe and metadata-only. Absent until dev/download_variants.R runs.
+tahoe_cell_variants <- function() tahoe_table("cell_line_variants")
+
+#' Target gene symbols for a single drug name, parsed from the drug table's
+#' comma/semicolon-separated `targets` column. character(0) if unknown.
+tahoe_drug_targets <- function(drug_name) {
+  if (length(drug_name) != 1 || is.na(drug_name) || !nzchar(drug_name)) {
+    return(character(0))
+  }
+  d <- tahoe_drug()
+  if (!all(c("drug", "targets") %in% names(d))) {
+    return(character(0))
+  }
+  row <- d[d$drug == drug_name, , drop = FALSE]
+  if (nrow(row) == 0) {
+    return(character(0))
+  }
+  parts <- trimws(unlist(strsplit(as.character(row$targets[[1]]), "[,;]")))
+  unique(parts[!is.na(parts) & nzchar(parts)])
+}
+
+#' Assayed cell lines carrying a somatic variant in any of `genes`. Joins the
+#' variant table to the lines actually present in the obs grid, so only
+#' experimentally-assayed lines are returned -- the set over which a
+#' mutant-vs-wildtype contrast could be designed. One row per matching (cell
+#' line, variant). Empty tibble when there is no variant data or no match.
+tahoe_target_mutations <- function(genes) {
+  genes <- unique(genes[!is.na(genes) & nzchar(genes)])
+  empty <- dplyr::tibble(
+    cell_name = character(),
+    gene = character(),
+    protein_change = character(),
+    source = character()
+  )
+  if (length(genes) == 0) {
+    return(empty)
+  }
+  v <- tryCatch(tahoe_cell_variants(), error = function(e) NULL)
+  if (
+    is.null(v) || nrow(v) == 0 || !all(c("cell_name", "gene") %in% names(v))
+  ) {
+    return(empty)
+  }
+  assayed <- unique(tahoe_cell_grid()$cell_name)
+  dplyr::as_tibble(
+    v[v$gene %in% genes & v$cell_name %in% assayed, , drop = FALSE]
+  )
+}
+
 #' Parse the `drugname_drugconc` string, e.g. "[('Drug', 5.0, 'uM')]", into a
 #' tibble of (conc, unit). Returns NA for values it cannot parse.
 tahoe_parse_dose <- function(x) {
@@ -140,17 +231,32 @@ tahoe_parse_dose <- function(x) {
   dplyr::tibble(conc = conc, unit = unit)
 }
 
-#' Where the cell-level obs data would come from given the environment.
-#' Returns list(type = "local"|"remote"|"fixture", src = path-or-url).
-#' Default (nothing downloaded, no env) is the synthetic fixture so the app is
-#' fast, offline, and CI-safe. Set TAHOE_OBS_REMOTE=1 to query HuggingFace.
-tahoe_obs_source <- function() {
+# TAHOE_OBS_REMOTE truthy? (set, and not "false"/"0").
+.tahoe_remote_opted <- function() {
+  v <- Sys.getenv("TAHOE_OBS_REMOTE", unset = "")
+  nzchar(v) && !identical(tolower(v), "false") && v != "0"
+}
+
+#' Resolve where cell-level obs data comes from -- a single policy, so Overview
+#' and the Cells tab can never disagree about the source within a session.
+#' Returns list(type = "local"|"remote"|"fixture", src). A local download always
+#' wins; otherwise `purpose` decides when the 2.29 GB remote obs is worth it:
+#'  - "counts": cheap one-shot headline aggregates -- go remote when the small
+#'    tables are real (the user downloaded data and wants real numbers) or
+#'    TAHOE_OBS_REMOTE is set.
+#'  - "summary": interactive per-cell aggregation -- go remote ONLY when
+#'    explicitly opted in, so browsing never silently fires repeated 2.29 GB
+#'    scans; otherwise stay on the fast fixture (with a clear provenance badge).
+resolve_obs_source <- function(purpose = c("summary", "counts")) {
+  purpose <- match.arg(purpose)
   local <- file.path(tahoe_data_dir(), "obs_metadata.parquet")
   if (file.exists(local)) {
     return(list(type = "local", src = local))
   }
-  remote <- Sys.getenv("TAHOE_OBS_REMOTE", unset = "")
-  if (nzchar(remote) && !identical(tolower(remote), "false") && remote != "0") {
+  real_tables <- identical(attr(tahoe_drug(), "tahoe_source"), "real")
+  go_remote <- .tahoe_remote_opted() ||
+    (identical(purpose, "counts") && real_tables)
+  if (go_remote) {
     return(list(type = "remote", src = .tahoe_obs_remote_url))
   }
   list(
@@ -159,29 +265,10 @@ tahoe_obs_source <- function() {
   )
 }
 
-#' Obs source to use for the headline dataset counts (cells, cell lines).
-#' These are cheap aggregate queries, so prefer the real data: local file if
-#' present, else a remote scan when the small tables are real (the user has
-#' downloaded data and wants real numbers) or TAHOE_OBS_REMOTE is set, else the
-#' synthetic fixture (pure demo / offline / CI). See [tahoe_summary_counts()].
-.tahoe_obs_count_source <- function() {
-  local <- file.path(tahoe_data_dir(), "obs_metadata.parquet")
-  if (file.exists(local)) {
-    return(list(type = "local", src = local))
-  }
-  remote_env <- Sys.getenv("TAHOE_OBS_REMOTE", unset = "")
-  opted_remote <- nzchar(remote_env) &&
-    !identical(tolower(remote_env), "false") &&
-    remote_env != "0"
-  real_tables <- identical(attr(tahoe_drug(), "tahoe_source"), "real")
-  if (opted_remote || real_tables) {
-    return(list(type = "remote", src = .tahoe_obs_remote_url))
-  }
-  list(
-    type = "fixture",
-    src = file.path(tahoe_fixture_dir(), "obs_metadata.parquet")
-  )
-}
+# Backward-compatible wrappers around the single policy above: per-cell summary
+# queries (Cells tab) vs. the headline count aggregates (Overview).
+tahoe_obs_source <- function() resolve_obs_source("summary")
+.tahoe_obs_count_source <- function() resolve_obs_source("counts")
 
 # Ensure httpfs is available before querying a remote parquet, and register a
 # HuggingFace token as a duckdb secret when one is configured.
@@ -191,6 +278,10 @@ tahoe_obs_source <- function() {
   }
   con <- tahoe_con()
   DBI::dbExecute(con, "INSTALL httpfs; LOAD httpfs;")
+  # Bounded retries/timeout so a flaky remote read fails cleanly instead of
+  # hanging a session (best-effort tuning; ignore if a knob is unavailable).
+  try(DBI::dbExecute(con, "SET http_retries=3"), silent = TRUE)
+  try(DBI::dbExecute(con, "SET http_timeout=60000"), silent = TRUE)
   token <- tahoe_hf_token()
   if (nzchar(token)) {
     DBI::dbExecute(
@@ -414,6 +505,38 @@ tahoe_summary_counts <- function() {
   )
 }
 
+# SQL for the per (drug x cell line x plate x dose) grid. `extended` adds the
+# QC-tier (pass_filter = 'full'), cell-cycle-phase, and QC-metric-sum aggregates
+# the QC/Coverage views use; the minimal form (cell counts only) is the fallback
+# for an obs table that lacks those columns. Kept identical to the query in
+# dev/build_grid.R so a prebuilt grid and an on-the-fly grid match exactly.
+.tahoe_grid_query <- function(src_quoted, extended = TRUE) {
+  base_sel <- paste0(
+    "SELECT drug, cell_name, plate, TRY_CAST(regexp_extract(",
+    "drugname_drugconc, ',\\s*([0-9.eE+-]+)\\s*,', 1) AS DOUBLE) AS conc, ",
+    "count(*) AS n_cells"
+  )
+  ext_sel <- if (extended) {
+    paste0(
+      ", count(*) FILTER (WHERE pass_filter = 'full') AS n_full",
+      ", count(*) FILTER (WHERE phase = 'G1') AS n_g1",
+      ", count(*) FILTER (WHERE phase = 'S') AS n_s",
+      ", count(*) FILTER (WHERE phase = 'G2M') AS n_g2m",
+      ", sum(pcnt_mito) AS sum_pcnt_mito",
+      ", sum(gene_count) AS sum_gene_count",
+      ", sum(tscp_count) AS sum_tscp_count"
+    )
+  } else {
+    ""
+  }
+  sprintf(
+    "%s%s FROM read_parquet(%s) GROUP BY 1, 2, 3, 4",
+    base_sel,
+    ext_sel,
+    src_quoted
+  )
+}
+
 #' Per (drug x cell line x plate x dose) cell-count grid, cached. This small
 #' aggregate (~66k rows for the real data) is derived once from the obs data so
 #' the subset builder can compute live, accurate cell counts locally without
@@ -436,18 +559,24 @@ tahoe_cell_grid <- function() {
         if (identical(source$type, "remote")) {
           .tahoe_load_httpfs()
         }
-        dplyr::as_tibble(DBI::dbGetQuery(
-          tahoe_con(),
-          sprintf(
-            paste0(
-              "SELECT drug, cell_name, plate, TRY_CAST(regexp_extract(",
-              "drugname_drugconc, ',\\s*([0-9.eE+-]+)\\s*,', 1) AS DOUBLE) ",
-              "AS conc, count(*) AS n_cells FROM read_parquet(%s) ",
-              "GROUP BY 1, 2, 3, 4"
-            ),
-            .tahoe_quote(source$src)
-          )
-        ))
+        src_q <- .tahoe_quote(source$src)
+        # Prefer the extended grid; fall back to counts-only if the obs table
+        # lacks the QC/phase columns, so the grid is never empty on schema drift.
+        ext <- tryCatch(
+          dplyr::as_tibble(DBI::dbGetQuery(
+            tahoe_con(),
+            .tahoe_grid_query(src_q, extended = TRUE)
+          )),
+          error = function(e) NULL
+        )
+        if (is.null(ext)) {
+          dplyr::as_tibble(DBI::dbGetQuery(
+            tahoe_con(),
+            .tahoe_grid_query(src_q, extended = FALSE)
+          ))
+        } else {
+          ext
+        }
       }
     },
     error = function(e) NULL
@@ -479,6 +608,40 @@ tahoe_cell_grid <- function() {
   base
 }
 
+# The extended per-condition columns a full grid carries beyond the cell counts.
+.tahoe_grid_extra_cols <- c(
+  "n_full",
+  "n_g1",
+  "n_s",
+  "n_g2m",
+  "sum_pcnt_mito",
+  "sum_gene_count",
+  "sum_tscp_count"
+)
+
+# If the grid carries the extended QC/phase columns, summarise them to the given
+# grain -- QC-passing cell count, cell-cycle phase counts, and cell-weighted mean
+# QC metrics -- and left-join onto `summary_df`. Returns `summary_df` unchanged
+# when the columns are absent (a counts-only grid), so callers that expect only
+# the base columns keep working. `by_cols` is the grouping key of `summary_df`.
+.tahoe_join_grid_extras <- function(summary_df, g, by_cols) {
+  if (!all(.tahoe_grid_extra_cols %in% names(g))) {
+    return(summary_df)
+  }
+  extra <- dplyr::summarise(
+    dplyr::group_by(g, dplyr::across(dplyr::all_of(by_cols))),
+    n_full = sum(n_full),
+    n_g1 = sum(n_g1),
+    n_s = sum(n_s),
+    n_g2m = sum(n_g2m),
+    mean_pcnt_mito = sum(sum_pcnt_mito) / sum(n_cells),
+    mean_gene_count = sum(sum_gene_count) / sum(n_cells),
+    mean_tscp_count = sum(sum_tscp_count) / sum(n_cells),
+    .groups = "drop"
+  )
+  dplyr::left_join(summary_df, extra, by = by_cols)
+}
+
 #' Coverage summary derived from the cell grid: total cells per (drug x cell
 #' line), the set of non-zero doses tested, how many of the 3 doses are present,
 #' and the number of plates. Powers the coverage matrix and QC views. `DMSO_TF`
@@ -496,7 +659,7 @@ tahoe_coverage <- function() {
       n_plates = integer()
     ))
   }
-  dplyr::summarise(
+  cov <- dplyr::summarise(
     dplyr::group_by(g, drug, cell_name, organ),
     n_cells = sum(n_cells),
     n_doses = dplyr::n_distinct(conc[conc > 0]),
@@ -504,6 +667,7 @@ tahoe_coverage <- function() {
     n_plates = dplyr::n_distinct(plate),
     .groups = "drop"
   )
+  .tahoe_join_grid_extras(cov, g, c("drug", "cell_name"))
 }
 
 #' Analysis conditions from the cell grid: cells per (drug x cell line x dose),
@@ -522,10 +686,11 @@ tahoe_conditions <- function() {
       n_plates = integer()
     ))
   }
-  dplyr::summarise(
+  cond <- dplyr::summarise(
     dplyr::group_by(g, drug, cell_name, organ, conc),
     n_cells = sum(n_cells),
     n_plates = dplyr::n_distinct(plate),
     .groups = "drop"
   )
+  .tahoe_join_grid_extras(cond, g, c("drug", "cell_name", "conc"))
 }

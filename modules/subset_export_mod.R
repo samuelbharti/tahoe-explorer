@@ -46,7 +46,39 @@ subset_export_ui <- function(id, show_recipe = FALSE) {
         ),
         tags$p(
           class = "text-muted small",
-          "Copy-paste code to reproduce this selection on the full dataset."
+          "Pick a language, copy-paste the code to reproduce this selection on",
+          " the full dataset, or download it as a notebook to start from."
+        ),
+        div(
+          class = "d-flex gap-2 flex-wrap align-items-end mb-2",
+          div(
+            style = "min-width: 150px;",
+            selectInput(
+              ns("recipe_lang"),
+              "Language",
+              choices = c(
+                "R (duckdb)" = "r",
+                "Python (scanpy)" = "python"
+              )
+            )
+          ),
+          div(
+            style = "min-width: 190px;",
+            selectInput(
+              ns("recipe_format"),
+              "Notebook format",
+              choices = c(
+                "R Markdown (.Rmd)" = "rmd",
+                "Quarto (.qmd)" = "qmd",
+                "Jupyter (.ipynb)" = "ipynb"
+              )
+            )
+          ),
+          downloadButton(
+            ns("recipe_dl"),
+            "Download",
+            class = "btn-sm btn-outline-primary mb-3"
+          )
         ),
         verbatimTextOutput(ns("recipe"))
       )
@@ -66,7 +98,8 @@ subset_export_server <- function(
   id,
   data_reactive,
   file_stem = "tahoe_subset",
-  recipe = NULL
+  recipe = NULL,
+  recipe_parts = NULL
 ) {
   moduleServer(id, function(input, output, session) {
     current_data <- reactive({
@@ -114,10 +147,49 @@ subset_export_server <- function(
       }
     )
 
-    if (!is.null(recipe)) {
+    # The recipe text: prefer the structured parts (which also power the
+    # notebook download) and fall back to a plain recipe string. When parts are
+    # available the display follows the selected language, so the on-screen code
+    # matches what a download would contain.
+    if (!is.null(recipe_parts)) {
+      output$recipe <- renderText({
+        parts <- .export_resolve(recipe_parts, default = NULL)
+        if (is.null(parts)) {
+          return("")
+        }
+        lang <- input$recipe_lang %||% "r"
+        code <- if (identical(lang, "r")) parts$r_code else parts$py_code
+        if (is.null(code)) {
+          parts$recipe %||% ""
+        } else {
+          paste(c(parts$header, "", code), collapse = "\n")
+        }
+      })
+    } else if (!is.null(recipe)) {
       output$recipe <- renderText({
         .export_resolve(recipe, default = "")
       })
+    }
+
+    if (!is.null(recipe_parts)) {
+      recipe_ext <- c(rmd = ".Rmd", qmd = ".qmd", ipynb = ".ipynb")
+      output$recipe_dl <- downloadHandler(
+        filename = function() {
+          fmt <- input$recipe_format %||% "rmd"
+          paste0(stem(), "_recipe", recipe_ext[[fmt]])
+        },
+        content = function(file) {
+          parts <- .export_resolve(recipe_parts, default = NULL)
+          fmt <- input$recipe_format %||% "rmd"
+          lang <- input$recipe_lang %||% "r"
+          text <- if (is.null(parts)) {
+            "No selection to export."
+          } else {
+            tahoe_subset_document(parts, format = fmt, language = lang)
+          }
+          writeLines(text, file, useBytes = TRUE)
+        }
+      )
     }
 
     invisible(current_data)

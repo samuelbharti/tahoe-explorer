@@ -43,7 +43,9 @@ cell_line_explorer_ui <- function(id) {
   bslib::layout_sidebar(
     sidebar = bslib::sidebar(
       title = "Filters",
-      width = 300,
+      width = 250,
+      gap = "0.4rem",
+      padding = "0.6rem",
       selectizeInput(
         ns("organ"),
         "Organ",
@@ -71,26 +73,65 @@ cell_line_explorer_ui <- function(id) {
         placeholder = "e.g. SYNTH"
       )
     ),
-    bslib::card(
-      bslib::card_header("Matching cell lines"),
-      subset_export_ui(ns("export")),
-      tags$hr(),
-      reactable::reactableOutput(ns("table"))
-    ),
+    # Tables on the left, their charts on the right, in two compact rows so the
+    # tab reads in a screen or two instead of one long scroll.
     bslib::layout_columns(
-      col_widths = c(6, 6),
+      col_widths = c(7, 5),
       bslib::card(
-        bslib::card_header("Cell lines by organ"),
-        plotly::plotlyOutput(ns("organ_plot"), height = 320)
+        full_screen = TRUE,
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Matching cell lines"),
+          tahoe_table_columns_ui(ns("table"))
+        ),
+        subset_export_ui(ns("export")),
+        tags$hr(),
+        tahoe_table_ui(ns("table"))
       ),
-      bslib::card(
-        bslib::card_header("Top driver genes"),
-        plotly::plotlyOutput(ns("gene_plot"), height = 320)
+      div(
+        bslib::card(
+          bslib::card_header("Cell lines by organ"),
+          plotly::plotlyOutput(ns("organ_plot"), height = 260)
+        ),
+        bslib::card(
+          bslib::card_header("Top driver genes"),
+          plotly::plotlyOutput(ns("gene_plot"), height = 260)
+        ),
+        bslib::card(
+          bslib::card_header("Variant-type breakdown"),
+          plotly::plotlyOutput(ns("var_type_plot"), height = 260)
+        )
       )
     ),
-    bslib::card(
-      bslib::card_header("Variant-type breakdown"),
-      plotly::plotlyOutput(ns("var_type_plot"), height = 300)
+    bslib::layout_columns(
+      col_widths = c(7, 5),
+      bslib::card(
+        full_screen = TRUE,
+        bslib::card_header(
+          class = "d-flex justify-content-between align-items-center",
+          span("Somatic variants"),
+          div(
+            class = "d-flex gap-2 align-items-center",
+            tahoe_table_columns_ui(ns("variants")),
+            .info_pop(
+              paste(
+                "Somatic mutation calls for the matching cell lines. Full",
+                "somatic profiles from DepMap 24Q4 (CC BY 4.0) where available,",
+                "with curated driver variants from Cellosaurus for lines DepMap",
+                "does not cover. One row per variant; the source column shows the",
+                "origin. Empty until dev/download_variants.R is run; the demo",
+                "uses synthetic data."
+              ),
+              title = "Somatic variants"
+            )
+          )
+        ),
+        tahoe_table_ui(ns("variants"))
+      ),
+      bslib::card(
+        bslib::card_header("Most frequently mutated genes"),
+        plotly::plotlyOutput(ns("mutated_genes_plot"), height = 300)
+      )
     )
   )
 }
@@ -139,12 +180,9 @@ cell_line_explorer_server <- function(id) {
       ]
     })
 
-    output$table <- reactable::renderReactable({
-      df <- filtered_lines()
-      validate(need(nrow(df) > 0, "No cell lines match the current filters."))
-
-      # Turn the DepMap ID into a clickable portal link when present, keeping
-      # the original ID text as the link label.
+    # Turn the DepMap ID into a clickable portal link when present, keeping
+    # the original ID text as the link label.
+    cell_line_cols <- function(df) {
       col_defs <- list()
       if ("Cell_ID_DepMap" %in% names(df)) {
         col_defs[["Cell_ID_DepMap"]] <- reactable::colDef(
@@ -163,8 +201,73 @@ cell_line_explorer_server <- function(id) {
           }
         )
       }
+      col_defs
+    }
 
-      tahoe_reactable(df, columns = col_defs)
+    tahoe_table_server(
+      "table",
+      data = filtered_lines,
+      columns = cell_line_cols,
+      empty_message = "No cell lines match the current filters."
+    )
+
+    # Somatic variants for the matching lines: an inner join of the external
+    # variant table onto the filtered cell lines by cell name (every line has
+    # one, so DepMap- and Cellosaurus-sourced rows both attach). Empty (not an
+    # error) when the variant table is absent or nothing matches.
+    variants <- reactive({
+      v <- tryCatch(tahoe_cell_variants(), error = function(e) NULL)
+      lines <- filtered_lines()
+      if (
+        is.null(v) ||
+          nrow(v) == 0 ||
+          !"cell_name" %in% names(v) ||
+          !"cell_name" %in% names(lines)
+      ) {
+        return(dplyr::tibble(cell_name = character(), gene = character()))
+      }
+      keep <- intersect(c("cell_name", "Organ"), names(lines))
+      dplyr::inner_join(lines[, keep, drop = FALSE], v, by = "cell_name")
+    })
+
+    # Column-trimmed, preferred-order view of the matching variants.
+    variants_display <- reactive({
+      v <- variants()
+      if (is.null(v) || nrow(v) == 0) {
+        return(v)
+      }
+      pref <- c(
+        "cell_name",
+        "source",
+        "gene",
+        "protein_change",
+        "variant_type",
+        "consequence",
+        "zygosity",
+        "hotspot",
+        "likely_lof",
+        "dbsnp"
+      )
+      v[, intersect(pref, names(v)), drop = FALSE]
+    })
+
+    tahoe_table_server(
+      "variants",
+      data = variants_display,
+      empty_message = paste(
+        "No somatic variants for the matching cell lines.",
+        "Run dev/download_variants.R to load DepMap / Cellosaurus variants",
+        "(the offline demo shows synthetic variants)."
+      )
+    )
+
+    output$mutated_genes_plot <- plotly::renderPlotly({
+      v <- variants()
+      validate(need(
+        nrow(v) > 0 && "gene" %in% names(v),
+        "No variant data to plot."
+      ))
+      tahoe_plotly(.cell_line_bar(v, "gene", tahoe_colors$orange))
     })
 
     output$organ_plot <- plotly::renderPlotly({

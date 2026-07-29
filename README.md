@@ -89,6 +89,69 @@ shiny::runApp()
 
 Or open the project in RStudio and click Run App.
 
+## AI assistant (Chat tab)
+
+An optional **Chat** tab adds a Gemini-backed assistant (via `ellmer` and
+`shinychat` on Google Vertex AI) that can explain the Tahoe-100M dataset and this
+app, and — most usefully — help you plan a subset: describe your research question
+and it recommends which filters and columns to pick, then returns the same
+reproducible R + Python pull recipe as the **Subset builder** tab. It answers only
+from a set of hand-written tools over the app's metadata, so it does not fabricate
+numbers; no tool can read files, environment variables, or secrets.
+
+The assistant is **off by default and degrades gracefully**: until it is
+configured (and `ellmer` + `shinychat` are installed), the Chat tab shows a short
+setup panel and the rest of the app is unaffected. Nothing about the assistant is
+loaded unless the tab is enabled.
+
+It can be powered two ways, chosen live from a **Model source** selector in the
+chat sidebar: a **shared** assistant the operator configures on Google Vertex
+(below), and/or **bring your own key** — each user pastes their own Gemini,
+OpenAI, or Anthropic key, held only in their browser session and never stored or
+logged. Either path alone is enough to enable the tab. With your own key you can
+pick a model from a short curated list or click **List models for this key** to
+load the provider's current, key-scoped models (so the picker never offers a
+model your account can't use) — or just type any model id and press Enter.
+
+To configure the shared assistant:
+
+1. Install the packages (both are in `renv.lock`): `renv::restore()`, or
+   `install.packages(c("ellmer", "shinychat"))`.
+2. Authenticate with Google Cloud once — **no API key or token is stored in the
+   repo**:
+
+   ```sh
+   gcloud auth application-default login
+   ```
+
+3. Set your project in `.Renviron` (git-ignored; see `.Renviron.example`) and
+   restart R.
+
+Configuration via environment variables:
+
+- `TAHOE_VERTEX_PROJECT` — GCP project with Vertex AI enabled (required to turn
+  the tab on). The aliases `VERTEX_PROJECT_ID`, `GOOGLE_CLOUD_PROJECT`, and
+  `GCLOUD_PROJECT` are also accepted.
+- `TAHOE_VERTEX_LOCATION` — Vertex region (default `us-central1`); the alias
+  `VERTEX_LOCATION` is also accepted.
+- `TAHOE_VERTEX_MODEL` — Gemini model id (default `gemini-2.5-flash`).
+- `TAHOE_AGENT_TEMPERATURE` — sampling temperature (default `0.2`, for factual
+  answers).
+- `TAHOE_AGENT_DISABLE` — set to `1` to force the tab off even when configured
+  (the test suite sets this).
+- `TAHOE_AGENT_BYOK` — set to `0` to remove the bring-your-own-key option (on by
+  default whenever the packages are installed).
+- `TAHOE_AGENT_BYOK_PROVIDERS` — comma list of BYOK providers to offer (default
+  `gemini,openai,anthropic`; unknown names are ignored).
+
+The assistant sticks to the Tahoe-100M dataset, this app, and subset planning; it
+declines clinical or medical advice and off-topic requests. In Docker there is no
+`gcloud` login, so the shared assistant degrades to the setup panel unless you
+provide credentials (for example, a mounted service-account key or workload
+identity) — but users can still bring their own key. Because a bring-your-own key
+travels from the browser to the server, **serve the app over HTTPS** for any
+public deployment.
+
 ## Build And Run With Docker
 
 ```bash
