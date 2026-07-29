@@ -311,7 +311,12 @@ chat_agent_ui <- function(id) {
         help_note
       )
     ),
-    .chat_window(ns, height = "calc(100vh - 170px)", fill = TRUE)
+    div(
+      class = "d-inline-flex align-items-center gap-2 mb-2 fw-semibold",
+      shiny::icon("robot"),
+      "Tahoe assistant"
+    ),
+    .chat_window(ns, height = "calc(100vh - 210px)", fill = TRUE)
   ))
 }
 

@@ -106,7 +106,8 @@ do.call(
       # controls sit in a collapsed section inside the sidebar (chat_agent_ui).
       sidebar = bslib::sidebar(
         id = "assistant_dock",
-        title = tagList(shiny::icon("robot"), " Tahoe assistant"),
+        # No sidebar title: the "Model & key" settings sit at the very top, with
+        # the "Tahoe assistant" heading below them, inside chat_agent_ui.
         position = "left",
         open = "closed",
         width = 600,
