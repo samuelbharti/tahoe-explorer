@@ -3,7 +3,8 @@
 register_page(
   id = "genes",
   title = "Genes",
-  order = 25,
+  # Sits just before About (order 70), after Samples & cells (order 60).
+  order = 65,
   ui = div(
     class = "p-2",
     h3("Gene explorer"),
