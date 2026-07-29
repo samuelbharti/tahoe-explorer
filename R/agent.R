@@ -243,7 +243,8 @@ tahoe_agent_env_provider <- function() {
   "20-app-features.md",
   "30-data-schema.md",
   "40-subset-playbook.md",
-  "50-guardrails.md"
+  "50-guardrails.md",
+  "60-followups.md"
 )
 
 # Where the prompt markdown lives: inst/agent/prompts under the app root. The app

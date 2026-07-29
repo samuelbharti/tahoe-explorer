@@ -271,11 +271,36 @@ chat_agent_ui <- function(id) {
       ".tahoe-chat-dock .form-group,",
       ".tahoe-chat-dock .shiny-input-container",
       "{margin-bottom:0.4rem !important;}",
-      ".tahoe-chat-dock .accordion-body{padding:0.6rem 0.8rem;}"
+      ".tahoe-chat-dock .accordion-body{padding:0.6rem 0.8rem;}",
+      # Clickable suggestions (greeting examples and the follow-ups the model
+      # appends to each answer) render as a plain bulleted list of links rather
+      # than shinychat's default grid of cards.
+      ".tahoe-chat-dock .shiny-chat-suggestion-list",
+      "{display:block !important;grid-template-columns:none !important;",
+      "list-style:disc !important;padding-left:1.25rem !important;",
+      "gap:0 !important;}",
+      ".tahoe-chat-dock .shiny-chat-suggestion-list>li",
+      "{display:list-item !important;margin:0.15rem 0 !important;}",
+      ".tahoe-chat-dock .shiny-chat-suggestion-list-item",
+      "{display:inline !important;padding:0 !important;border:0 !important;",
+      "border-radius:0 !important;background:none !important;",
+      "box-shadow:none !important;transform:none !important;",
+      "animation:none !important;color:var(--bs-link-color,#007bc2) !important;",
+      "text-decoration:underline dotted 2px !important;",
+      "text-underline-offset:3px !important;}",
+      ".tahoe-chat-dock .shiny-chat-suggestion-list-item:hover",
+      "{background:none !important;box-shadow:none !important;",
+      "transform:none !important;text-decoration-style:solid !important;}",
+      ".tahoe-chat-dock .shiny-chat-suggestion-list-item:before,",
+      ".tahoe-chat-dock .shiny-chat-suggestion-list-item:after",
+      "{display:none !important;}",
+      ".tahoe-chat-dock .shiny-chat-suggestion-list-item-title",
+      "{display:inline !important;font-weight:600 !important;}",
+      ".tahoe-chat-dock .shiny-chat-suggestion-list-item-body",
+      "{display:inline !important;color:inherit !important;}"
     ))),
-    # Settings folded into a collapsed section so the chat gets most of the
-    # room; expand it to switch model source or paste a key. The top margin
-    # keeps it clear of the sidebar's collapse toggle in the header.
+    # Settings first (Model & key), then the assistant heading, then the chat.
+    # The top margin keeps the accordion clear of the sidebar's collapse toggle.
     bslib::accordion(
       open = FALSE,
       class = "mt-4 mb-2",
