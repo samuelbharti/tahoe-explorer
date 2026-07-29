@@ -84,7 +84,7 @@ qc_ui <- function(id) {
           span("Plate / batch structure"),
           .info_pop(
             paste(
-              "How cell lines and drugs map onto the 14 plates. If a drug sits",
+              "How cell lines and drugs map onto the plates. If a drug sits",
               "on only a few plates, its signal is confounded with those",
               "plates — compare it against DMSO controls from the same plates."
             ),
