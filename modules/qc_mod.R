@@ -185,7 +185,15 @@ qc_ui <- function(id) {
   vaxis$axisLabel <- c(.tahoe_echart_axis_lbl, list(formatter = pct))
   e <- .tahoe_echart_axis(e, "x", vaxis)
   e <- .tahoe_echart_axis(e, "y", .tahoe_echart_cat_axis(inverse = TRUE))
-  e <- .tahoe_echart_common(e, legend = TRUE)
+  # Legend up top; the "Share of cells" title sits under the bottom axis, so a
+  # bottom legend would collide with it. Extra bottom room keeps the title clear.
+  e <- .tahoe_echart_common(
+    e,
+    legend = TRUE,
+    legend_pos = "top",
+    grid_top = "16%",
+    grid_bottom = "16%"
+  )
   echarts4r::e_tooltip(
     e,
     trigger = "item",
