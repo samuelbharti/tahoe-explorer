@@ -7,6 +7,7 @@
 .tour_page_ui <- list(
   overview = function() overview_ui("overview"),
   about = function() about_ui("about"),
+  genes = function() gene_explorer_ui("genes"),
   drugs = function() drug_explorer_ui("drugs"),
   cell_lines = function() cell_line_explorer_ui("cell_lines"),
   obs = function() obs_explorer_ui("obs"),

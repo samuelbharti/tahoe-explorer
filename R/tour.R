@@ -12,7 +12,15 @@
 # Small helper: a Cicerone guide from a list of step lists. Each step is
 # list(el, title, description, position); `el` is the raw (un-#'d) element id.
 .tahoe_guide <- function(id, steps) {
-  guide <- cicerone::Cicerone$new(id = id)
+  # "Skip" ends this page's tour and hands off to the next page's (see
+  # server.R); "Next ▸" on the last step does the same on finish.
+  guide <- cicerone::Cicerone$new(
+    id = id,
+    close_btn_text = "Skip",
+    done_btn_text = "Next ▸",
+    next_btn_text = "Next",
+    prev_btn_text = "Back"
+  )
   for (s in steps) {
     guide$step(
       el = s$el,
@@ -237,7 +245,9 @@ obs_tour <- function() {
     "obs_tour",
     list(
       list(
-        el = "obs-tour_views",
+        # Target the tab strip itself (small), not the whole tabset wrapper,
+        # so the popover sits next to it instead of spanning the page.
+        el = "obs-view",
         title = "Two views",
         description = paste(
           "Switch between Samples & plates (per-sample QC) and Cell-level obs,",
@@ -256,8 +266,8 @@ obs_tour <- function() {
         el = "obs-tour_charts",
         title = "Sample QC charts",
         description = paste(
-          "Samples per plate and per drug, plus the distribution of mean %",
-          "mito and mean transcript count across samples."
+          "Samples per plate and per drug, plus the distribution of mean mito",
+          "fraction and mean transcript count across samples."
         ),
         position = "top"
       ),
