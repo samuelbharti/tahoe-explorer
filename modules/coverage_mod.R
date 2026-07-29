@@ -18,28 +18,33 @@ coverage_ui <- function(id) {
       gap = "0.4rem",
       padding = "0.6rem",
       title = "Matrix",
-      selectizeInput(
-        ns("drugs"),
-        "Drugs (rows)",
-        choices = NULL,
-        multiple = TRUE,
-        options = list(placeholder = "Search drugs…")
-      ),
-      selectizeInput(
-        ns("organs"),
-        "Organs (columns)",
-        choices = NULL,
-        multiple = TRUE,
-        options = list(placeholder = "All organs")
-      ),
+      # tour_* ids anchor the guided demo (see R/tour.R).
       div(
-        class = "text-muted small",
-        "Color = cells profiled (log scale). Click a tile for its dose",
-        "breakdown."
-      ),
-      actionLink(ns("reset"), "Reset to top drugs", class = "small")
+        id = ns("tour_controls"),
+        selectizeInput(
+          ns("drugs"),
+          "Drugs (rows)",
+          choices = NULL,
+          multiple = TRUE,
+          options = list(placeholder = "Search drugs…")
+        ),
+        selectizeInput(
+          ns("organs"),
+          "Organs (columns)",
+          choices = NULL,
+          multiple = TRUE,
+          options = list(placeholder = "All organs")
+        ),
+        div(
+          class = "text-muted small",
+          "Color = cells profiled (log scale). Click a tile for its dose",
+          "breakdown."
+        ),
+        actionLink(ns("reset"), "Reset to top drugs", class = "small")
+      )
     ),
     bslib::card(
+      id = ns("tour_heatmap"),
       full_screen = TRUE,
       bslib::card_header(
         class = "d-flex justify-content-between align-items-center",
@@ -57,6 +62,7 @@ coverage_ui <- function(id) {
       plotly::plotlyOutput(ns("heatmap"), height = "56vh")
     ),
     bslib::card(
+      id = ns("tour_detail"),
       height = "34vh",
       bslib::card_header(uiOutput(ns("detail_title"), inline = TRUE)),
       plotly::plotlyOutput(ns("detail_plot"), height = "24vh")

@@ -30,16 +30,20 @@ gene_explorer_ui <- function(id) {
     sidebar = bslib::sidebar(
       title = "Gene lookup",
       width = 320,
-      textAreaInput(
-        ns("query"),
-        "Check genes (symbols)",
-        rows = 4,
-        placeholder = "e.g. TP53, EGFR, KRAS"
-      ),
+      # tour_* ids anchor the guided demo (see R/tour.R).
       div(
-        class = "text-muted small",
-        "Paste gene symbols (comma or space separated) to check which were",
-        "measured. Leave empty to browse the full table."
+        id = ns("tour_lookup"),
+        textAreaInput(
+          ns("query"),
+          "Check genes (symbols)",
+          rows = 4,
+          placeholder = "e.g. TP53, EGFR, KRAS"
+        ),
+        div(
+          class = "text-muted small",
+          "Paste gene symbols (comma or space separated) to check which were",
+          "measured. Leave empty to browse the full table."
+        )
       ),
       tags$hr(),
       actionButton(
@@ -48,9 +52,10 @@ gene_explorer_ui <- function(id) {
         class = "btn-sm btn-outline-secondary"
       )
     ),
-    uiOutput(ns("summary")),
+    div(id = ns("tour_summary"), uiOutput(ns("summary"))),
     uiOutput(ns("lookup")),
     bslib::card(
+      id = ns("tour_table"),
       bslib::card_header("Genes"),
       subset_export_ui(ns("export")),
       tags$hr(),

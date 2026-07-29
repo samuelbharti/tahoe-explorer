@@ -104,7 +104,9 @@ about_ui <- function(id) {
         "virtual-cell / perturbation-prediction models."
       )
     ),
+    # tour_* ids anchor the guided demo (see R/tour.R).
     bslib::card(
+      id = ns("tour_glance"),
       bslib::card_header("At a glance"),
       uiOutput(ns("dims")),
       bslib::card_footer(
@@ -118,6 +120,7 @@ about_ui <- function(id) {
       )
     ),
     bslib::layout_columns(
+      id = ns("tour_design"),
       col_widths = c(6, 6),
       bslib::card(
         bslib::card_header("How the experiment is laid out"),
@@ -139,6 +142,7 @@ about_ui <- function(id) {
       )
     ),
     bslib::card(
+      id = ns("tour_tables"),
       bslib::card_header("The metadata tables"),
       bslib::accordion(
         open = FALSE,
@@ -242,6 +246,7 @@ about_ui <- function(id) {
       )
     ),
     bslib::card(
+      id = ns("tour_using"),
       bslib::card_header("Using this app"),
       tags$ul(
         tags$li(tags$b("Overview"), " — headline dimensions and quick charts"),

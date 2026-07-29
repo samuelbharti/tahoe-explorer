@@ -46,31 +46,35 @@ cell_line_explorer_ui <- function(id) {
       width = 250,
       gap = "0.4rem",
       padding = "0.6rem",
-      selectizeInput(
-        ns("organ"),
-        "Organ",
-        choices = .cell_line_choices(df, "Organ"),
-        multiple = TRUE,
-        options = list(placeholder = "All organs")
-      ),
-      selectizeInput(
-        ns("gene"),
-        "Driver gene",
-        choices = .cell_line_choices(df, "Driver_Gene_Symbol"),
-        multiple = TRUE,
-        options = list(placeholder = "All genes")
-      ),
-      selectizeInput(
-        ns("var_type"),
-        "Variant type",
-        choices = .cell_line_choices(df, "Driver_VarType"),
-        multiple = TRUE,
-        options = list(placeholder = "All variant types")
-      ),
-      textInput(
-        ns("cell_name"),
-        "Cell name contains",
-        placeholder = "e.g. SYNTH"
+      # tour_* ids anchor the guided demo (see R/tour.R).
+      div(
+        id = ns("tour_filters"),
+        selectizeInput(
+          ns("organ"),
+          "Organ",
+          choices = .cell_line_choices(df, "Organ"),
+          multiple = TRUE,
+          options = list(placeholder = "All organs")
+        ),
+        selectizeInput(
+          ns("gene"),
+          "Driver gene",
+          choices = .cell_line_choices(df, "Driver_Gene_Symbol"),
+          multiple = TRUE,
+          options = list(placeholder = "All genes")
+        ),
+        selectizeInput(
+          ns("var_type"),
+          "Variant type",
+          choices = .cell_line_choices(df, "Driver_VarType"),
+          multiple = TRUE,
+          options = list(placeholder = "All variant types")
+        ),
+        textInput(
+          ns("cell_name"),
+          "Cell name contains",
+          placeholder = "e.g. SYNTH"
+        )
       )
     ),
     # Tables on the left, their charts on the right, in two compact rows so the
@@ -78,6 +82,7 @@ cell_line_explorer_ui <- function(id) {
     bslib::layout_columns(
       col_widths = c(7, 5),
       bslib::card(
+        id = ns("tour_table"),
         full_screen = TRUE,
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
@@ -89,6 +94,7 @@ cell_line_explorer_ui <- function(id) {
         tahoe_table_ui(ns("table"))
       ),
       div(
+        id = ns("tour_charts"),
         bslib::card(
           bslib::card_header("Cell lines by organ"),
           plotly::plotlyOutput(ns("organ_plot"), height = 260)
@@ -106,6 +112,7 @@ cell_line_explorer_ui <- function(id) {
     bslib::layout_columns(
       col_widths = c(7, 5),
       bslib::card(
+        id = ns("tour_variants"),
         full_screen = TRUE,
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",

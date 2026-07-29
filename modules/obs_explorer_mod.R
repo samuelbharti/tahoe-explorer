@@ -86,22 +86,27 @@ obs_explorer_ui <- function(id) {
     bslib::layout_sidebar(
       sidebar = bslib::sidebar(
         title = "Filters",
-        selectizeInput(
-          ns("sample_plate"),
-          "Plate",
-          choices = NULL,
-          multiple = TRUE,
-          options = list(placeholder = "All plates")
-        ),
-        selectizeInput(
-          ns("sample_drug"),
-          "Drug",
-          choices = NULL,
-          multiple = TRUE,
-          options = list(placeholder = "All drugs")
+        # tour_* ids anchor the guided demo (see R/tour.R).
+        div(
+          id = ns("tour_filters"),
+          selectizeInput(
+            ns("sample_plate"),
+            "Plate",
+            choices = NULL,
+            multiple = TRUE,
+            options = list(placeholder = "All plates")
+          ),
+          selectizeInput(
+            ns("sample_drug"),
+            "Drug",
+            choices = NULL,
+            multiple = TRUE,
+            options = list(placeholder = "All drugs")
+          )
         )
       ),
       bslib::layout_columns(
+        id = ns("tour_charts"),
         col_widths = c(6, 6),
         bslib::card(
           bslib::card_header("Samples per plate"),
@@ -121,6 +126,7 @@ obs_explorer_ui <- function(id) {
         )
       ),
       bslib::card(
+        id = ns("tour_table"),
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
           span("Filtered samples"),
@@ -200,7 +206,10 @@ obs_explorer_ui <- function(id) {
         "cell-level metadata without loading the full cell table."
       )
     ),
-    bslib::navset_card_tab(samples_tab, obs_tab)
+    div(
+      id = ns("tour_views"),
+      bslib::navset_card_tab(samples_tab, obs_tab)
+    )
   )
 }
 

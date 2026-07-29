@@ -67,47 +67,51 @@ subset_builder_ui <- function(id) {
     sidebar = bslib::sidebar(
       title = "Build a subset",
       width = 330,
-      selectizeInput(
-        ns("organs"),
-        "Tissue / organ",
-        choices = organ_choices,
-        multiple = TRUE,
-        options = list(placeholder = "All tissues")
-      ),
-      selectizeInput(
-        ns("drivers"),
-        "Driver mutation (gene)",
-        choices = driver_choices,
-        multiple = TRUE,
-        options = list(placeholder = "Any driver gene")
-      ),
-      selectizeInput(
-        ns("cell_lines"),
-        "Cell lines",
-        choices = assayed,
-        multiple = TRUE,
-        options = list(placeholder = "All (matching tissue/driver)")
-      ),
-      selectizeInput(
-        ns("drugs"),
-        "Drugs",
-        choices = drug_choices,
-        multiple = TRUE,
-        options = list(placeholder = "All drugs")
-      ),
-      selectizeInput(
-        ns("doses"),
-        "Dose (µM)",
-        choices = dose_choices,
-        multiple = TRUE,
-        options = list(placeholder = "All doses")
-      ),
-      selectizeInput(
-        ns("plates"),
-        "Plates",
-        choices = plate_choices,
-        multiple = TRUE,
-        options = list(placeholder = "All plates")
+      # tour_* ids anchor the guided demo (see R/tour.R).
+      div(
+        id = ns("tour_builder"),
+        selectizeInput(
+          ns("organs"),
+          "Tissue / organ",
+          choices = organ_choices,
+          multiple = TRUE,
+          options = list(placeholder = "All tissues")
+        ),
+        selectizeInput(
+          ns("drivers"),
+          "Driver mutation (gene)",
+          choices = driver_choices,
+          multiple = TRUE,
+          options = list(placeholder = "Any driver gene")
+        ),
+        selectizeInput(
+          ns("cell_lines"),
+          "Cell lines",
+          choices = assayed,
+          multiple = TRUE,
+          options = list(placeholder = "All (matching tissue/driver)")
+        ),
+        selectizeInput(
+          ns("drugs"),
+          "Drugs",
+          choices = drug_choices,
+          multiple = TRUE,
+          options = list(placeholder = "All drugs")
+        ),
+        selectizeInput(
+          ns("doses"),
+          "Dose (µM)",
+          choices = dose_choices,
+          multiple = TRUE,
+          options = list(placeholder = "All doses")
+        ),
+        selectizeInput(
+          ns("plates"),
+          "Plates",
+          choices = plate_choices,
+          multiple = TRUE,
+          options = list(placeholder = "All plates")
+        )
       ),
       tags$hr(),
       actionButton(
@@ -116,7 +120,7 @@ subset_builder_ui <- function(id) {
         class = "btn-sm btn-outline-secondary"
       )
     ),
-    uiOutput(ns("coverage_boxes")),
+    div(id = ns("tour_estimate"), uiOutput(ns("coverage_boxes"))),
     div(
       class = "text-muted small mb-2",
       tags$strong("How the experiment is laid out: "),
@@ -129,6 +133,7 @@ subset_builder_ui <- function(id) {
       ", not the number of samples."
     ),
     bslib::layout_columns(
+      id = ns("tour_preview"),
       col_widths = c(7, 5),
       bslib::card(
         bslib::card_header("Cells in selection, by cell line"),
@@ -144,6 +149,7 @@ subset_builder_ui <- function(id) {
       )
     ),
     bslib::card(
+      id = ns("tour_export"),
       bslib::card_header("Export subset and analysis recipe"),
       uiOutput(ns("estimate")),
       subset_export_ui(ns("export"), show_recipe = TRUE)

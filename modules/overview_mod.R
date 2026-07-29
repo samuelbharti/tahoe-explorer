@@ -31,10 +31,12 @@
 overview_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    uiOutput(ns("summary_boxes")),
+    # tour_* ids anchor the guided demo (see R/tour.R).
+    div(id = ns("tour_summary"), uiOutput(ns("summary_boxes"))),
     bslib::layout_columns(
       col_widths = c(5, 7),
       bslib::card(
+        id = ns("tour_organs"),
         height = "44vh",
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
@@ -56,6 +58,7 @@ overview_ui <- function(id) {
         )
       ),
       bslib::card(
+        id = ns("tour_table"),
         height = "44vh",
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
@@ -85,6 +88,7 @@ overview_ui <- function(id) {
       )
     ),
     bslib::layout_columns(
+      id = ns("tour_drivers"),
       col_widths = c(6, 6),
       bslib::card(
         height = 360,
