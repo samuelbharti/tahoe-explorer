@@ -56,6 +56,7 @@ obs_explorer_ui <- function(id) {
 
   samples_tab <- bslib::nav_panel(
     title = "Samples & plates",
+    value = "samples",
     bslib::layout_sidebar(
       sidebar = bslib::sidebar(
         id = ns("filters_sidebar"),
@@ -119,6 +120,7 @@ obs_explorer_ui <- function(id) {
 
   obs_tab <- bslib::nav_panel(
     title = "Cell-level obs",
+    value = "cells",
     bslib::layout_sidebar(
       sidebar = bslib::sidebar(
         id = ns("query_sidebar"),
@@ -188,7 +190,9 @@ obs_explorer_ui <- function(id) {
     ),
     div(
       id = ns("tour_views"),
-      bslib::navset_card_tab(samples_tab, obs_tab)
+      # id lets the server react when the sub-tab changes, so the newly shown
+      # sub-tab's filter sidebar can be re-laid-out (each sub-tab owns its own).
+      bslib::navset_card_tab(id = ns("view"), samples_tab, obs_tab)
     )
   )
 }

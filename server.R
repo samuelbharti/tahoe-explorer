@@ -23,24 +23,57 @@ function(input, output, session) {
   })
 
   # The assistant (600px) and a page's filter sidebar are too much side by side,
-  # so couple them: opening the assistant closes every page's filter sidebar,
-  # and closing it reopens them. ignoreInit keeps the natural defaults on load
-  # (assistant closed, filters open). input$assistant_dock is the sidebar's
-  # collapse state (TRUE = open).
-  .filter_sidebars <- c(
-    "drugs-filters_sidebar",
-    "cell_lines-filters_sidebar",
-    "coverage-filters_sidebar",
-    "subset-filters_sidebar",
-    "obs-filters_sidebar",
-    "obs-query_sidebar"
+  # so couple them: while the assistant is open a page's filter sidebar collapses,
+  # and it reopens when the assistant closes. input$assistant_dock is the
+  # assistant sidebar's collapse state (TRUE = open); filters_open() is the state
+  # the visible page's filter sidebar should be in.
+  #
+  # We only ever toggle the sidebar of the CURRENTLY VISIBLE page. Toggling a
+  # sidebar that lives in a hidden tab leaves it blank when that tab is next
+  # shown (bslib can't lay it out while the pane is display:none), which is the
+  # bug where filters came up empty after using the assistant. So on a tab
+  # change we re-apply the desired state to the newly shown page's sidebar while
+  # it is visible, and on an assistant toggle we act on the active page only.
+  .page_filter_sidebars <- list(
+    drugs = "drugs-filters_sidebar",
+    cell_lines = "cell_lines-filters_sidebar",
+    coverage = "coverage-filters_sidebar",
+    subset = "subset-filters_sidebar"
   )
-  observeEvent(input$assistant_dock, ignoreInit = TRUE, {
-    open_filters <- !isTRUE(input$assistant_dock)
-    for (sb in .filter_sidebars) {
-      bslib::sidebar_toggle(sb, open = open_filters, session = session)
+  filters_open <- reactive(!isTRUE(input$assistant_dock))
+  # The filter sidebar(s) currently VISIBLE for the active page. Samples & cells
+  # has an inner tabset whose two sub-tabs each own a sidebar, so we pick the one
+  # for the visible sub-tab -- never touch the hidden sub-tab's sidebar.
+  active_filter_sidebars <- function() {
+    page <- input$main_nav %||% ""
+    if (identical(page, "obs")) {
+      view <- input[["obs-view"]] %||% "samples"
+      return(
+        if (identical(view, "cells")) {
+          "obs-query_sidebar"
+        } else {
+          "obs-filters_sidebar"
+        }
+      )
     }
-  })
+    .page_filter_sidebars[[page]]
+  }
+  apply_filter_state <- function() {
+    for (sb in active_filter_sidebars()) {
+      bslib::sidebar_toggle(
+        sb,
+        open = isolate(filters_open()),
+        session = session
+      )
+    }
+  }
+  # Re-apply the desired state whenever the visible sidebar context changes: the
+  # assistant opening/closing, a tab change, or the obs sub-tab change. Acting
+  # only on the visible sidebar keeps a sidebar from blanking out (bslib can't
+  # lay one out while its tab pane is hidden).
+  observeEvent(input$assistant_dock, ignoreInit = TRUE, apply_filter_state())
+  observeEvent(input$main_nav, apply_filter_state())
+  observeEvent(input[["obs-view"]], apply_filter_state())
 
   # Guided demo. Every page has a cicerone tour (R/tour.R); the navbar "Demo"
   # button starts the tour for whichever tab is active. Guides are built and
