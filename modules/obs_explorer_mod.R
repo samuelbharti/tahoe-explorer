@@ -49,33 +49,6 @@
   )
 }
 
-# Horizontal bar of an already-tidy data frame (label + value). Mirrors
-# .overview_bar but takes a precomputed frame so awkward source column names
-# never reach ggplot.
-.obs_bar <- function(plot_df, fill, x_title = "Count") {
-  validate(need(nrow(plot_df) > 0, "No data to plot."))
-  plot_df$label <- factor(plot_df$label, levels = rev(plot_df$label))
-  ggplot2::ggplot(plot_df, ggplot2::aes(x = label, y = value)) +
-    ggplot2::geom_col(fill = fill) +
-    ggplot2::coord_flip() +
-    ggplot2::scale_y_continuous(
-      labels = scales::label_comma(),
-      expand = ggplot2::expansion(c(0, 0.08))
-    ) +
-    ggplot2::labs(x = NULL, y = x_title) +
-    tahoe_theme()
-}
-
-# Histogram of one numeric column, precomputed into a tidy frame.
-.obs_hist <- function(values, fill, x_title) {
-  plot_df <- data.frame(value = values[is.finite(values)])
-  validate(need(nrow(plot_df) > 0, "No data to plot."))
-  ggplot2::ggplot(plot_df, ggplot2::aes(x = value)) +
-    ggplot2::geom_histogram(bins = 20, fill = fill, colour = "white") +
-    ggplot2::scale_x_continuous(labels = scales::label_comma()) +
-    ggplot2::labs(x = x_title, y = "Samples") +
-    tahoe_theme()
-}
 
 obs_explorer_ui <- function(id) {
   ns <- NS(id)
@@ -85,6 +58,7 @@ obs_explorer_ui <- function(id) {
     title = "Samples & plates",
     bslib::layout_sidebar(
       sidebar = bslib::sidebar(
+        id = ns("filters_sidebar"),
         title = "Filters",
         # tour_* ids anchor the guided demo (see R/tour.R).
         div(
@@ -109,20 +83,24 @@ obs_explorer_ui <- function(id) {
         id = ns("tour_charts"),
         col_widths = c(6, 6),
         bslib::card(
+          full_screen = TRUE,
           bslib::card_header("Samples per plate"),
-          plotly::plotlyOutput(ns("plate_plot"), height = 280)
+          echarts4r::echarts4rOutput(ns("plate_plot"), height = "340px")
         ),
         bslib::card(
+          full_screen = TRUE,
           bslib::card_header("Samples per drug (top 12)"),
-          plotly::plotlyOutput(ns("drug_plot"), height = 280)
+          echarts4r::echarts4rOutput(ns("drug_plot"), height = "340px")
         ),
         bslib::card(
+          full_screen = TRUE,
           bslib::card_header("Distribution of mean mito fraction"),
-          plotly::plotlyOutput(ns("mito_plot"), height = 260)
+          echarts4r::echarts4rOutput(ns("mito_plot"), height = "320px")
         ),
         bslib::card(
+          full_screen = TRUE,
           bslib::card_header("Distribution of mean transcript count"),
-          plotly::plotlyOutput(ns("tscp_plot"), height = 260)
+          echarts4r::echarts4rOutput(ns("tscp_plot"), height = "320px")
         )
       ),
       bslib::card(
@@ -143,6 +121,7 @@ obs_explorer_ui <- function(id) {
     title = "Cell-level obs",
     bslib::layout_sidebar(
       sidebar = bslib::sidebar(
+        id = ns("query_sidebar"),
         title = "Query",
         tags$span(
           class = paste("badge", .obs_source_theme(source_type)),
@@ -180,8 +159,9 @@ obs_explorer_ui <- function(id) {
         uiOutput(ns("obs_status"))
       ),
       bslib::card(
+        full_screen = TRUE,
         bslib::card_header("Summary"),
-        plotly::plotlyOutput(ns("obs_plot"), height = 320)
+        echarts4r::echarts4rOutput(ns("obs_plot"), height = "380px")
       ),
       bslib::card(
         bslib::card_header(
@@ -257,7 +237,7 @@ obs_explorer_server <- function(id) {
       df
     })
 
-    output$plate_plot <- plotly::renderPlotly({
+    output$plate_plot <- echarts4r::renderEcharts4r({
       df <- samples_filtered()
       counts <- sort(table(df$plate), decreasing = TRUE)
       plot_df <- data.frame(
@@ -265,10 +245,10 @@ obs_explorer_server <- function(id) {
         value = as.integer(counts),
         stringsAsFactors = FALSE
       )
-      tahoe_plotly(.obs_bar(plot_df, tahoe_colors$primary, "Samples"))
+      tahoe_echart_hbar(plot_df, tahoe_colors$primary, "Samples")
     })
 
-    output$drug_plot <- plotly::renderPlotly({
+    output$drug_plot <- echarts4r::renderEcharts4r({
       df <- samples_filtered()
       counts <- utils::head(sort(table(df$drug), decreasing = TRUE), 12)
       plot_df <- data.frame(
@@ -276,26 +256,22 @@ obs_explorer_server <- function(id) {
         value = as.integer(counts),
         stringsAsFactors = FALSE
       )
-      tahoe_plotly(.obs_bar(plot_df, tahoe_colors$green, "Samples"))
+      tahoe_echart_hbar(plot_df, tahoe_colors$green, "Samples")
     })
 
-    output$mito_plot <- plotly::renderPlotly({
-      tahoe_plotly(
-        .obs_hist(
-          samples_filtered()$mean_pcnt_mito,
-          tahoe_colors$blue,
-          "Mean mito fraction"
-        )
+    output$mito_plot <- echarts4r::renderEcharts4r({
+      tahoe_echart_hist(
+        samples_filtered()$mean_pcnt_mito,
+        tahoe_colors$blue,
+        "Mean mito fraction"
       )
     })
 
-    output$tscp_plot <- plotly::renderPlotly({
-      tahoe_plotly(
-        .obs_hist(
-          samples_filtered()$mean_tscp_count,
-          tahoe_colors$violet,
-          "Mean transcript count"
-        )
+    output$tscp_plot <- echarts4r::renderEcharts4r({
+      tahoe_echart_hist(
+        samples_filtered()$mean_tscp_count,
+        tahoe_colors$violet,
+        "Mean transcript count"
       )
     })
 
@@ -428,11 +404,15 @@ obs_explorer_server <- function(id) {
       )
     })
 
-    output$obs_plot <- plotly::renderPlotly({
+    output$obs_plot <- echarts4r::renderEcharts4r({
       metric_label <- names(.obs_metric_choices)[
         match(input$obs_metric, .obs_metric_choices)
       ]
-      tahoe_plotly(.obs_bar(obs_plot_df(), tahoe_colors$sand, metric_label))
+      tahoe_echart_hbar(
+        obs_plot_df(),
+        tahoe_colors$sand,
+        value_name = metric_label
+      )
     })
 
     tahoe_table_server("obs_table", data = obs_result)
@@ -441,6 +421,60 @@ obs_explorer_server <- function(id) {
       "obs_export",
       data_reactive = obs_result,
       file_stem = "obs_summary"
+    )
+
+    # --- Chat-assistant bridge: read and drive the sample plate/drug filters.
+    # Server-side selectize inputs, so `set` re-sends choices with the selection.
+    obs_bridge_get <- function() {
+      df <- isolate(samples_all())
+      list(
+        filters = list(
+          plates = list(
+            current = isolate(input$sample_plate),
+            options = sort(unique(df$plate))
+          ),
+          drugs = list(
+            current = isolate(input$sample_drug),
+            options = sort(unique(df$drug))
+          )
+        ),
+        matched_samples = nrow(isolate(samples_filtered()))
+      )
+    }
+    obs_bridge_set <- function(request) {
+      df <- isolate(samples_all())
+      ignored <- list()
+      apply_multi <- function(field, input_id, domain) {
+        v <- tahoe_bridge_validate(request[[field]], domain)
+        if (length(v$bad) > 0) {
+          ignored[[field]] <<- v$bad
+        }
+        if (!is.null(v$good)) {
+          updateSelectizeInput(
+            session,
+            input_id,
+            choices = domain,
+            selected = v$good,
+            server = TRUE
+          )
+        }
+      }
+      apply_multi("plates", "sample_plate", sort(unique(df$plate)))
+      apply_multi("drugs", "sample_drug", sort(unique(df$drug)))
+      out <- list(applied = TRUE)
+      if (length(ignored) > 0) {
+        out$ignored <- ignored
+      }
+      out
+    }
+    tahoe_register_page_bridge(
+      session,
+      "obs",
+      list(
+        title = "Samples & cells",
+        get = obs_bridge_get,
+        set = obs_bridge_set
+      )
     )
 
     # Expose reactives so tests (and callers) can inspect module state.

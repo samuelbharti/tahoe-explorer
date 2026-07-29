@@ -406,42 +406,6 @@ subset_tour <- function() {
   )
 }
 
-chat_tour <- function() {
-  .tahoe_guide(
-    "chat_tour",
-    list(
-      list(
-        el = "chat-tour_intro",
-        title = "The Tahoe assistant",
-        description = paste(
-          "An AI assistant with tools over this app's data layer. It can explain",
-          "the dataset and the app, and help you plan a subset."
-        ),
-        position = "bottom"
-      ),
-      list(
-        el = "chat-tour_source",
-        title = "Choose a model",
-        description = paste(
-          "Use the shared assistant if configured, or bring your own key",
-          "(Gemini / OpenAI / Anthropic). Switching source starts a fresh",
-          "conversation."
-        ),
-        position = "right"
-      ),
-      list(
-        el = "chat-chat",
-        title = "Ask away",
-        description = paste(
-          "Ask about Tahoe-100M, drugs, cell lines, or building a subset — the",
-          "assistant can even drive the Subset builder for you."
-        ),
-        position = "left"
-      )
-    )
-  )
-}
-
 genes_tour <- function() {
   .tahoe_guide(
     "genes_tour",
@@ -476,9 +440,9 @@ genes_tour <- function() {
     )
   )
 }
-
 #' Named list mapping each page id (register_page id / navbar value) to its
 #' tour builder. server.R uses this to start the right tour for the active tab.
+#' The assistant is an app-wide sidebar rather than a tab, so it has no tour.
 tahoe_tours <- function() {
   list(
     overview = overview_tour,
@@ -489,7 +453,6 @@ tahoe_tours <- function() {
     obs = obs_tour,
     coverage = coverage_tour,
     qc = qc_tour,
-    subset = subset_tour,
-    chat = chat_tour
+    subset = subset_tour
   )
 }

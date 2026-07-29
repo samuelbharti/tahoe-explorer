@@ -44,56 +44,22 @@
   as.character(v)
 }
 
-# Shared horizontal-bar geom for the summary charts. `plot_df` carries `label`
-# (a factor, reverse-ordered for coord_flip), `n`, and `hl` (logical: is this
-# category part of the selected drug?). A `key` aesthetic makes each bar's
-# category readable from a plotly click; highlighted bars get the accent color.
-.drug_bar_geom <- function(plot_df, base_fill, y_lab) {
-  ggplot2::ggplot(
-    plot_df,
-    ggplot2::aes(x = label, y = n, key = label, fill = hl)
-  ) +
-    ggplot2::geom_col() +
-    ggplot2::scale_fill_manual(
-      values = c(`FALSE` = base_fill, `TRUE` = tahoe_colors$orange),
-      guide = "none"
-    ) +
-    ggplot2::coord_flip() +
-    ggplot2::scale_y_continuous(expand = ggplot2::expansion(c(0, 0.12))) +
-    ggplot2::labs(x = NULL, y = y_lab) +
-    tahoe_theme()
-}
-
-# Horizontal bar chart of the value counts of `column` in `df`. `highlight` is a
-# character vector of category values to emphasize (the selected drug's).
-.drug_count_bar <- function(
-  df,
-  column,
-  base_fill,
-  highlight = character(0),
-  top_n = 12
-) {
+# Ordered (label, value) value counts of `column` in `df`, largest first. Shared
+# by the bar and its click handler (which maps a clicked row back to this frame).
+.drug_count_data <- function(df, column, top_n = 12) {
   validate(need(column %in% names(df), "Column not available"))
   validate(need(nrow(df) > 0, "No drugs match the current filters"))
   counts <- sort(table(df[[column]]), decreasing = TRUE)
   counts <- utils::head(counts, top_n)
-  plot_df <- data.frame(
-    label = factor(names(counts), levels = rev(names(counts))),
-    n = as.integer(counts),
+  data.frame(
+    label = names(counts),
+    value = as.integer(counts),
     stringsAsFactors = FALSE
   )
-  plot_df$hl <- as.character(plot_df$label) %in% highlight
-  .drug_bar_geom(plot_df, base_fill, "Count")
 }
 
-# Horizontal bar chart of the top-N most frequent targets in `df`. `highlight`
-# is a vector of target genes to emphasize (the selected drug's targets).
-.drug_target_bar <- function(
-  df,
-  base_fill,
-  highlight = character(0),
-  top_n = 12
-) {
+# Ordered (label, value) counts of the top-N most frequent targets in `df`.
+.drug_target_data <- function(df, top_n = 12) {
   validate(need("targets" %in% names(df), "Targets not available"))
   validate(need(nrow(df) > 0, "No drugs match the current filters"))
   atoms <- unlist(stringr::str_split(df[["targets"]], ","))
@@ -102,13 +68,50 @@
   validate(need(length(atoms) > 0, "No targets to summarize"))
   counts <- sort(table(atoms), decreasing = TRUE)
   counts <- utils::head(counts, top_n)
-  plot_df <- data.frame(
-    label = factor(names(counts), levels = rev(names(counts))),
-    n = as.integer(counts),
+  data.frame(
+    label = names(counts),
+    value = as.integer(counts),
     stringsAsFactors = FALSE
   )
-  plot_df$hl <- as.character(plot_df$label) %in% highlight
-  .drug_bar_geom(plot_df, base_fill, "Drugs")
+}
+
+# Shared echarts4r bar for the summary charts: base-coloured bars with the
+# `highlight` categories (the selected drug's) painted in the accent colour.
+.drug_bar <- function(
+  plot_df,
+  base_fill,
+  highlight = character(0),
+  value_name = "Count"
+) {
+  tahoe_echart_hbar(
+    plot_df,
+    base_fill,
+    value_name = value_name,
+    highlight = if (length(highlight) == 0) NULL else highlight,
+    highlight_color = tahoe_colors$orange
+  )
+}
+
+# Value-count bar of `column` (used by tests; the server splits data + bar so a
+# click can be mapped back to the plotted frame).
+.drug_count_bar <- function(
+  df,
+  column,
+  base_fill,
+  highlight = character(0),
+  top_n = 12
+) {
+  .drug_bar(.drug_count_data(df, column, top_n), base_fill, highlight, "Count")
+}
+
+# Top-N target bar (used by tests).
+.drug_target_bar <- function(
+  df,
+  base_fill,
+  highlight = character(0),
+  top_n = 12
+) {
+  .drug_bar(.drug_target_data(df, top_n), base_fill, highlight, "Drugs")
 }
 
 # Build the selected-drug detail card body from a one-row drug data frame.
@@ -166,6 +169,7 @@ drug_explorer_ui <- function(id) {
   ns <- NS(id)
   bslib::layout_sidebar(
     sidebar = bslib::sidebar(
+      id = ns("filters_sidebar"),
       title = "Filters",
       width = 250,
       gap = "0.4rem",
@@ -258,16 +262,19 @@ drug_explorer_ui <- function(id) {
         div(
           id = ns("tour_charts"),
           bslib::card(
+            full_screen = TRUE,
             bslib::card_header("Drugs by mechanism (MOA, broad)"),
-            plotly::plotlyOutput(ns("moa_broad_plot"), height = 260)
+            echarts4r::echarts4rOutput(ns("moa_broad_plot"), height = "320px")
           ),
           bslib::card(
+            full_screen = TRUE,
             bslib::card_header("Approval status"),
-            plotly::plotlyOutput(ns("approval_plot"), height = 260)
+            echarts4r::echarts4rOutput(ns("approval_plot"), height = "320px")
           ),
           bslib::card(
+            full_screen = TRUE,
             bslib::card_header("Top targets"),
-            plotly::plotlyOutput(ns("targets_plot"), height = 260)
+            echarts4r::echarts4rOutput(ns("targets_plot"), height = "320px")
           )
         ),
         bslib::card(
@@ -466,72 +473,77 @@ drug_explorer_server <- function(id) {
       }
     })
 
+    # Ordered plot frames, shared by each chart and its click handler.
+    moa_df <- reactive(.drug_count_data(filtered(), "moa-broad"))
+    approval_df <- reactive(.drug_count_data(filtered(), "human-approved"))
+    targets_df <- reactive(.drug_target_data(filtered()))
+
     # --- Chart -> filter (click a bar to filter the table) -------------------
-    observeEvent(plotly::event_data("plotly_click", source = "drug_moa"), {
-      k <- plotly::event_data("plotly_click", source = "drug_moa")$key
-      if (is.null(k) || !nzchar(as.character(k))) {
+    # echarts4r reports the clicked bar's 1-based row in the plotted frame.
+    observeEvent(input$moa_broad_plot_clicked_row, {
+      d <- isolate(moa_df())
+      row <- input$moa_broad_plot_clicked_row
+      if (is.null(row) || row < 1 || row > nrow(d)) {
         return()
       }
       updateSelectizeInput(
         session,
         "moa_broad",
-        selected = union(input$moa_broad, as.character(k))
+        selected = union(input$moa_broad, as.character(d$label[[row]]))
       )
     })
-    observeEvent(plotly::event_data("plotly_click", source = "drug_approval"), {
-      k <- plotly::event_data("plotly_click", source = "drug_approval")$key
-      if (is.null(k) || !nzchar(as.character(k))) {
+    observeEvent(input$approval_plot_clicked_row, {
+      d <- isolate(approval_df())
+      row <- input$approval_plot_clicked_row
+      if (is.null(row) || row < 1 || row > nrow(d)) {
         return()
       }
       updateSelectizeInput(
         session,
         "approval",
-        selected = union(input$approval, as.character(k))
+        selected = union(input$approval, as.character(d$label[[row]]))
       )
     })
-    observeEvent(plotly::event_data("plotly_click", source = "drug_targets"), {
-      k <- plotly::event_data("plotly_click", source = "drug_targets")$key
-      if (is.null(k) || !nzchar(as.character(k))) {
+    observeEvent(input$targets_plot_clicked_row, {
+      d <- isolate(targets_df())
+      row <- input$targets_plot_clicked_row
+      if (is.null(row) || row < 1 || row > nrow(d)) {
         return()
       }
-      updateTextInput(session, "target_search", value = as.character(k))
+      updateTextInput(
+        session,
+        "target_search",
+        value = as.character(d$label[[row]])
+      )
     })
 
     # --- Charts (highlight the selected drug's categories) -------------------
-    output$moa_broad_plot <- plotly::renderPlotly({
+    output$moa_broad_plot <- echarts4r::renderEcharts4r({
       hl <- .drug_field(selected_row(), "moa-broad")
-      tahoe_plotly(
-        .drug_count_bar(
-          filtered(),
-          "moa-broad",
-          tahoe_colors$primary,
-          highlight = if (is.na(hl)) character(0) else hl
-        ),
-        source = "drug_moa"
+      .drug_bar(
+        moa_df(),
+        tahoe_colors$primary,
+        highlight = if (is.na(hl)) character(0) else hl,
+        value_name = "Count"
       )
     })
 
-    output$approval_plot <- plotly::renderPlotly({
+    output$approval_plot <- echarts4r::renderEcharts4r({
       hl <- .drug_field(selected_row(), "human-approved")
-      tahoe_plotly(
-        .drug_count_bar(
-          filtered(),
-          "human-approved",
-          tahoe_colors$green,
-          highlight = if (is.na(hl)) character(0) else hl
-        ),
-        source = "drug_approval"
+      .drug_bar(
+        approval_df(),
+        tahoe_colors$green,
+        highlight = if (is.na(hl)) character(0) else hl,
+        value_name = "Count"
       )
     })
 
-    output$targets_plot <- plotly::renderPlotly({
-      tahoe_plotly(
-        .drug_target_bar(
-          filtered(),
-          tahoe_colors$sand,
-          highlight = focus_targets()
-        ),
-        source = "drug_targets"
+    output$targets_plot <- echarts4r::renderEcharts4r({
+      .drug_bar(
+        targets_df(),
+        tahoe_colors$sand,
+        highlight = focus_targets(),
+        value_name = "Drugs"
       )
     })
 
@@ -623,6 +635,75 @@ drug_explorer_server <- function(id) {
       "export",
       data_reactive = filtered,
       file_stem = "drugs_subset"
+    )
+
+    # --- Chat-assistant bridge: let the assistant read and drive these filters.
+    drug_bridge_get <- function() {
+      d <- isolate(drugs())
+      list(
+        filters = list(
+          moa = list(
+            current = isolate(input$moa_broad),
+            options = .drug_choices(d, "moa-broad")
+          ),
+          moa_fine = list(
+            current = isolate(input$moa_fine),
+            options = .drug_choices(d, "moa-fine")
+          ),
+          approval = list(
+            current = isolate(input$approval),
+            options = .drug_choices(d, "human-approved")
+          ),
+          trials = list(
+            current = isolate(input$trials),
+            options = .drug_choices(d, "clinical-trials")
+          ),
+          target = list(current = isolate(input$target_search), kind = "text"),
+          name = list(current = isolate(input$name_search), kind = "text")
+        ),
+        matches = nrow(isolate(filtered()))
+      )
+    }
+    drug_bridge_set <- function(request) {
+      d <- isolate(drugs())
+      ignored <- list()
+      apply_multi <- function(field, input_id, col) {
+        v <- tahoe_bridge_validate(request[[field]], .drug_choices(d, col))
+        if (length(v$bad) > 0) {
+          ignored[[field]] <<- v$bad
+        }
+        if (!is.null(v$good)) {
+          updateSelectizeInput(session, input_id, selected = v$good)
+        }
+      }
+      apply_multi("moa", "moa_broad", "moa-broad")
+      apply_multi("moa_fine", "moa_fine", "moa-fine")
+      apply_multi("approval", "approval", "human-approved")
+      apply_multi("trials", "trials", "clinical-trials")
+      if (!is.null(request$target)) {
+        updateTextInput(
+          session,
+          "target_search",
+          value = as.character(request$target)
+        )
+      }
+      if (!is.null(request$name)) {
+        updateTextInput(
+          session,
+          "name_search",
+          value = as.character(request$name)
+        )
+      }
+      out <- list(applied = TRUE)
+      if (length(ignored) > 0) {
+        out$ignored <- ignored
+      }
+      out
+    }
+    tahoe_register_page_bridge(
+      session,
+      "drugs",
+      list(title = "Drugs", get = drug_bridge_get, set = drug_bridge_set)
     )
 
     # Return the filtered reactive so callers (and testServer) can read it.

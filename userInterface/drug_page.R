@@ -3,7 +3,7 @@
 register_page(
   id = "drugs",
   title = "Drugs",
-  order = 10,
+  order = 40,
   ui = div(
     class = "p-2",
     h3("Drug & MOA explorer"),

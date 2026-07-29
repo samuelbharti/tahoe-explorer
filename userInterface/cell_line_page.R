@@ -3,7 +3,7 @@
 register_page(
   id = "cell_lines",
   title = "Cell lines",
-  order = 20,
+  order = 50,
   ui = div(
     class = "p-2",
     h3("Cell-line explorer"),

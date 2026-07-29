@@ -3,7 +3,7 @@
 register_page(
   id = "coverage",
   title = "Coverage",
-  order = 35,
+  order = 30,
   ui = div(
     class = "p-2",
     h3("Coverage matrix"),

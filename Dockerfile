@@ -23,10 +23,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY . /home/app
 
 # Restore the exact project library from the committed lockfile. Fail loudly if
-# it is missing: the rocker/shiny base lacks duckdb/plotly/reactable/janitor/
-# DiagrammeR/..., so without a restore the app would only fail later at runtime
-# (library(duckdb) errors and the container exits). Generate the lock first with
-# dev/init-renv.R and commit it.
+# it is missing: the rocker/shiny base lacks duckdb/echarts4r/plotly/reactable/
+# janitor/cicerone/DiagrammeR/ltc/..., so without a restore the app would only
+# fail later at runtime (library(duckdb) errors and the container exits).
+# Generate the lock first with dev/init-renv.R and commit it.
 RUN Rscript -e "if (!requireNamespace('renv', quietly = TRUE)) install.packages('renv', repos = Sys.getenv('CRAN_MIRROR', 'https://cloud.r-project.org')); if (!file.exists('/home/app/renv.lock')) stop('No renv.lock found - run dev/init-renv.R and commit renv.lock before building.'); options(renv.config.pak.enabled = TRUE); restore_res <- try(renv::restore(prompt = FALSE, lockfile = '/home/app/renv.lock'), silent = TRUE); if (inherits(restore_res, 'try-error')) { message('pak-enabled restore failed, retrying with standard renv restore.'); options(renv.config.pak.enabled = FALSE); renv::restore(prompt = FALSE, lockfile = '/home/app/renv.lock') }"
 
 EXPOSE 3838

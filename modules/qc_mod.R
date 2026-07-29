@@ -85,7 +85,8 @@ qc_ui <- function(id) {
       id = ns("tour_batch"),
       col_widths = c(6, 6),
       bslib::card(
-        height = "40vh",
+        full_screen = TRUE,
+        height = "46vh",
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
           span("Vehicle control coverage (DMSO per cell line)"),
@@ -98,10 +99,11 @@ qc_ui <- function(id) {
             title = "Control coverage"
           )
         ),
-        plotly::plotlyOutput(ns("control_plot"), height = "30vh")
+        echarts4r::echarts4rOutput(ns("control_plot"), height = "36vh")
       ),
       bslib::card(
-        height = "40vh",
+        full_screen = TRUE,
+        height = "46vh",
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
           span("Plate / batch structure"),
@@ -115,12 +117,13 @@ qc_ui <- function(id) {
           )
         ),
         uiOutput(ns("plate_note")),
-        plotly::plotlyOutput(ns("plate_plot"), height = "22vh")
+        echarts4r::echarts4rOutput(ns("plate_plot"), height = "30vh")
       )
     ),
     bslib::card(
       id = ns("tour_phase"),
-      height = "42vh",
+      full_screen = TRUE,
+      height = "50vh",
       bslib::card_header(
         class = "d-flex justify-content-between align-items-center",
         span("Cell-cycle phase composition"),
@@ -135,86 +138,103 @@ qc_ui <- function(id) {
           title = "Cell-cycle composition"
         )
       ),
-      plotly::plotlyOutput(ns("phase_plot"), height = "32vh")
+      echarts4r::echarts4rOutput(ns("phase_plot"), height = "40vh")
     )
   )
 }
 
-# Stacked proportion bar of cell-cycle phase (G1/S/G2M) per organ.
+# Stacked 100%-proportion bar of cell-cycle phase (G1/S/G2M) per organ: one
+# echarts4r series per phase (stacked), with a phase legend and a percent axis.
+# Shares are precomputed so the stack sums to 1.
 .qc_phase_bar <- function(df) {
   validate(need(
     nrow(df) > 0,
     "Cell-cycle phase data is not available in this grid."
   ))
-  long <- dplyr::tibble(
-    organ = rep(df$organ, 3),
-    phase = rep(c("G1", "S", "G2M"), each = nrow(df)),
-    n = c(df$G1, df$S, df$G2M)
+  df$total <- df$G1 + df$S + df$G2M
+  df <- df[df$total > 0, , drop = FALSE]
+  validate(need(nrow(df) > 0, "No cells to plot."))
+  df <- df[order(-df$total), , drop = FALSE]
+  wide <- data.frame(
+    organ = df$organ,
+    G1 = df$G1 / df$total,
+    S = df$S / df$total,
+    G2M = df$G2M / df$total,
+    stringsAsFactors = FALSE
   )
-  long$phase <- factor(long$phase, levels = c("G1", "S", "G2M"))
-  totals <- tapply(long$n, long$organ, sum)
-  long$organ <- factor(long$organ, levels = names(sort(totals)))
-  long$text <- paste0(
-    long$organ,
-    " — ",
-    long$phase,
-    ": ",
-    format(long$n, big.mark = ","),
-    " cells"
+  pct <- htmlwidgets::JS("function(v){ return Math.round(v * 100) + '%'; }")
+  cols <- c(
+    G1 = tahoe_colors$blue,
+    S = tahoe_colors$primary,
+    G2M = tahoe_colors$green
   )
-  ggplot2::ggplot(
-    long,
-    ggplot2::aes(x = organ, y = n, fill = phase, text = text)
-  ) +
-    ggplot2::geom_col(position = "fill", width = 0.8) +
-    ggplot2::scale_y_continuous(labels = scales::label_percent()) +
-    ggplot2::scale_fill_manual(
-      values = c(
-        G1 = tahoe_colors$blue,
-        S = tahoe_colors$primary,
-        G2M = tahoe_colors$green
-      ),
-      name = NULL
-    ) +
-    ggplot2::coord_flip() +
-    ggplot2::labs(x = NULL, y = "Share of cells") +
-    tahoe_theme()
+  e <- echarts4r::e_charts(wide, organ, reorder = FALSE)
+  for (ph in c("G1", "S", "G2M")) {
+    e <- echarts4r::e_bar_(
+      e,
+      ph,
+      stack = "phase",
+      name = ph,
+      barWidth = "70%",
+      itemStyle = list(color = unname(cols[[ph]]))
+    )
+  }
+  e <- e |> echarts4r::e_flip_coords()
+  vaxis <- .tahoe_echart_value_axis("Share of cells")
+  vaxis$max <- 1
+  vaxis$axisLabel <- c(.tahoe_echart_axis_lbl, list(formatter = pct))
+  e <- .tahoe_echart_axis(e, "x", vaxis)
+  e <- .tahoe_echart_axis(e, "y", .tahoe_echart_cat_axis(inverse = TRUE))
+  e <- .tahoe_echart_common(e, legend = TRUE)
+  echarts4r::e_tooltip(
+    e,
+    trigger = "item",
+    backgroundColor = "rgba(255,255,255,0.96)",
+    borderColor = tahoe_colors$grid,
+    borderWidth = 1,
+    textStyle = list(
+      color = tahoe_colors$fg,
+      fontFamily = "Inter, system-ui, sans-serif"
+    ),
+    valueFormatter = pct
+  )
 }
 
 # Bar of DMSO control cells per cell line (ascending, so the weakest are first).
+# Many cell lines, so the category labels are hidden (hover for the name).
 .qc_control_bar <- function(df) {
   validate(need(nrow(df) > 0, "No control (DMSO) cells found."))
   df <- df[order(df$n_cells), , drop = FALSE]
-  df$cell_name <- factor(df$cell_name, levels = df$cell_name)
-  df$text <- paste0(df$cell_name, ": ", format(df$n_cells, big.mark = ","))
-  ggplot2::ggplot(
-    df,
-    ggplot2::aes(x = cell_name, y = n_cells, text = text)
-  ) +
-    ggplot2::geom_col(fill = tahoe_colors$primary, width = 0.8) +
-    ggplot2::scale_y_continuous(
-      labels = scales::label_number(scale_cut = scales::cut_short_scale()),
-      expand = ggplot2::expansion(c(0, 0.12))
-    ) +
-    ggplot2::labs(x = NULL, y = "DMSO cells") +
-    tahoe_theme() +
-    ggplot2::theme(axis.text.x = ggplot2::element_blank())
+  plot_df <- data.frame(
+    label = df$cell_name,
+    value = df$n_cells,
+    stringsAsFactors = FALSE
+  )
+  tahoe_echart_vbar(
+    plot_df,
+    tahoe_colors$primary,
+    value_name = "DMSO cells",
+    hide_labels = TRUE
+  )
 }
 
 # Distribution of how many plates each (non-control) drug appears on.
 .qc_plate_bar <- function(df) {
   validate(need(nrow(df) > 0, "No drug/plate data."))
   tab <- as.data.frame(table(plates = df$n_plates), stringsAsFactors = FALSE)
-  tab$plates <- factor(tab$plates, levels = sort(as.integer(tab$plates)))
-  tab$text <- paste0(tab$Freq, " drugs on ", tab$plates, " plate(s)")
-  ggplot2::ggplot(
-    tab,
-    ggplot2::aes(x = plates, y = Freq, text = text)
-  ) +
-    ggplot2::geom_col(fill = tahoe_colors$blue, width = 0.8) +
-    ggplot2::scale_y_continuous(expand = ggplot2::expansion(c(0, 0.12))) +
-    ggplot2::labs(x = "Plates a drug appears on", y = "Drugs") +
-    tahoe_theme()
+  tab$plates <- as.integer(tab$plates)
+  tab <- tab[order(tab$plates), , drop = FALSE]
+  plot_df <- data.frame(
+    label = as.character(tab$plates),
+    value = tab$Freq,
+    stringsAsFactors = FALSE
+  )
+  tahoe_echart_vbar(
+    plot_df,
+    tahoe_colors$blue,
+    value_name = "Drugs",
+    x_title = "Plates a drug appears on"
+  )
 }
 
 qc_server <- function(id) {
@@ -410,8 +430,8 @@ qc_server <- function(id) {
       empty_message = "Every drug × cell-line combo has the full dose series."
     )
 
-    output$control_plot <- plotly::renderPlotly({
-      tahoe_plotly(.qc_control_bar(control_by_line()), tooltip = "text")
+    output$control_plot <- echarts4r::renderEcharts4r({
+      .qc_control_bar(control_by_line())
     })
 
     output$plate_note <- renderUI({
@@ -443,12 +463,12 @@ qc_server <- function(id) {
       )
     })
 
-    output$plate_plot <- plotly::renderPlotly({
-      tahoe_plotly(.qc_plate_bar(plates_per_drug()), tooltip = "text")
+    output$plate_plot <- echarts4r::renderEcharts4r({
+      .qc_plate_bar(plates_per_drug())
     })
 
-    output$phase_plot <- plotly::renderPlotly({
-      tahoe_plotly(.qc_phase_bar(phase_by_organ()), tooltip = "text")
+    output$phase_plot <- echarts4r::renderEcharts4r({
+      .qc_phase_bar(phase_by_organ())
     })
   })
 }

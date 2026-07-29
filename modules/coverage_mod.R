@@ -6,14 +6,14 @@
 # cell line), so the signal here is cell depth and dose completeness, not
 # presence/absence. All from the local cell grid, so it is fast.
 
-# Sequential blue ramp for cell depth (light = few cells, dark = many).
-.coverage_fill_low <- "#CDE2FB"
-.coverage_fill_high <- "#0D366B"
+# Cell depth uses the shared Lake-Tahoe sequential ramp (ltc "heatmap0"):
+# tahoe_heatmap_cols (see R/theme.R), applied via scale_fill_gradientn below.
 
 coverage_ui <- function(id) {
   ns <- NS(id)
   bslib::layout_sidebar(
     sidebar = bslib::sidebar(
+      id = ns("filters_sidebar"),
       width = 250,
       gap = "0.4rem",
       padding = "0.6rem",
@@ -49,30 +49,36 @@ coverage_ui <- function(id) {
       bslib::card_header(
         class = "d-flex justify-content-between align-items-center",
         span("Cells profiled — drug × cell line"),
-        .info_pop(
-          paste(
-            "Each tile is one drug tested in one cell line; color shows how",
-            "many cells were profiled (log scale). Tahoe-100M is fully",
-            "crossed, so darker = more statistical power for that combination.",
-            "Click a tile to see its per-dose cell counts."
-          ),
-          title = "Coverage matrix"
+        div(
+          class = "d-flex gap-2 align-items-center",
+          tahoe_plot_refresh_ui(ns("refresh_plots")),
+          .info_pop(
+            paste(
+              "Each tile is one drug tested in one cell line; color shows how",
+              "many cells were profiled (log scale). Tahoe-100M is fully",
+              "crossed, so darker = more statistical power for that combination.",
+              "Click a tile to see its per-dose cell counts.",
+              "Use the redraw button if the plot looks the wrong size."
+            ),
+            title = "Coverage matrix"
+          )
         )
       ),
-      plotly::plotlyOutput(ns("heatmap"), height = "56vh")
+      echarts4r::echarts4rOutput(ns("heatmap"), height = "72vh")
     ),
     bslib::card(
       id = ns("tour_detail"),
-      height = "34vh",
+      full_screen = TRUE,
+      height = "40vh",
       bslib::card_header(uiOutput(ns("detail_title"), inline = TRUE)),
-      plotly::plotlyOutput(ns("detail_plot"), height = "24vh")
+      echarts4r::echarts4rOutput(ns("detail_plot"), height = "30vh")
     )
   )
 }
 
 # Row (drug) and column (cell line) orderings for the matrix. Cell lines are
 # grouped by organ; drugs sorted by total cells. Shared by the plot and the
-# click handler, which maps plotly's numeric axis indices back to labels.
+# click handler (the plotted category order is fed to the echarts axes).
 .coverage_orders <- function(df) {
   list(
     line = unique(df$cell_name[order(df$organ, df$cell_name)]),
@@ -80,7 +86,9 @@ coverage_ui <- function(id) {
   )
 }
 
-# Heatmap of cells profiled per (drug x cell line).
+# Heatmap of cells profiled per (drug x cell line), as a shared echarts4r
+# Lake-depth heatmap. Colour maps on log10(cells); the tooltip recovers the real
+# count. Clicking a tile emits `<id>_clicked_data` = c(cell_name, drug, log10).
 .coverage_heatmap <- function(df, line_order = NULL, drug_order = NULL) {
   validate(need(nrow(df) > 0, "No drug × cell-line combinations selected."))
   if (is.null(line_order) || is.null(drug_order)) {
@@ -88,41 +96,19 @@ coverage_ui <- function(id) {
     line_order <- ord$line
     drug_order <- ord$drug
   }
-  df$cell_name <- factor(df$cell_name, levels = line_order)
-  df$drug <- factor(df$drug, levels = drug_order)
-  df$text <- paste0(
-    df$drug,
-    " × ",
-    df$cell_name,
-    "\n",
-    format(df$n_cells, big.mark = ","),
-    " cells",
-    ifelse(nzchar(df$doses), paste0(" · doses ", df$doses, " µM"), "")
-  )
-  ggplot2::ggplot(
+  tip <- htmlwidgets::JS(paste0(
+    "function(p){ return p.value[1] + ' \\u00d7 ' + p.value[0] + '<br/>' + ",
+    "Math.round(Math.pow(10, p.value[2])).toLocaleString() + ' cells'; }"
+  ))
+  tahoe_echart_heatmap(
     df,
-    ggplot2::aes(
-      x = cell_name,
-      y = drug,
-      fill = n_cells,
-      text = text
-    )
-  ) +
-    ggplot2::geom_tile(color = "white", linewidth = 0.4) +
-    ggplot2::scale_fill_gradient(
-      low = .coverage_fill_low,
-      high = .coverage_fill_high,
-      trans = "log10",
-      labels = scales::label_number(scale_cut = scales::cut_short_scale()),
-      name = "Cells"
-    ) +
-    ggplot2::labs(x = NULL, y = NULL) +
-    tahoe_theme() +
-    ggplot2::theme(
-      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
-      panel.grid = ggplot2::element_blank(),
-      legend.position = "right"
-    )
+    x = "cell_name",
+    y = "drug",
+    z = "n_cells",
+    x_levels = line_order,
+    y_levels = drug_order,
+    tooltip = tip
+  )
 }
 
 # Per-dose cell counts for one (drug x cell line), summed over plates.
@@ -134,33 +120,25 @@ coverage_ui <- function(id) {
     n_plates = dplyr::n_distinct(plate),
     .groups = "drop"
   )
+  agg <- agg[order(agg$conc), , drop = FALSE]
   agg$label <- ifelse(agg$conc == 0, "Control (DMSO)", paste0(agg$conc, " µM"))
-  agg$label <- factor(agg$label, levels = agg$label[order(agg$conc)])
-  agg$text <- paste0(
-    agg$label,
-    ": ",
-    format(agg$n_cells, big.mark = ","),
-    " cells across ",
-    agg$n_plates,
-    " plate(s)"
+  plot_df <- data.frame(
+    label = agg$label,
+    value = agg$n_cells,
+    stringsAsFactors = FALSE
   )
-  ggplot2::ggplot(
-    agg,
-    ggplot2::aes(x = label, y = n_cells, text = text)
-  ) +
-    ggplot2::geom_col(fill = tahoe_colors$primary, width = 0.7) +
-    ggplot2::scale_y_continuous(
-      labels = scales::label_number(scale_cut = scales::cut_short_scale()),
-      expand = ggplot2::expansion(c(0, 0.12))
-    ) +
-    ggplot2::labs(x = NULL, y = "Cells") +
-    tahoe_theme()
+  tahoe_echart_vbar(plot_df, tahoe_colors$primary, value_name = "Cells")
 }
 
 coverage_server <- function(id) {
   moduleServer(id, function(input, output, session) {
-    click_src <- session$ns("cov")
     coverage <- reactive(tahoe_coverage())
+
+    # Redraw button: resize the (large) plots to their container if one gets
+    # stuck at a stale size after a layout change.
+    observeEvent(input$refresh_plots, {
+      tahoe_plot_refresh_server(input$refresh_plots, session)
+    })
 
     # Default drug selection: the top drugs by total cells profiled.
     top_drugs <- reactive({
@@ -205,40 +183,26 @@ coverage_server <- function(id) {
 
     orders <- reactive(.coverage_orders(filtered()))
 
-    output$heatmap <- plotly::renderPlotly({
+    output$heatmap <- echarts4r::renderEcharts4r({
       o <- orders()
-      tahoe_plotly(
-        .coverage_heatmap(filtered(), o$line, o$drug),
-        tooltip = "text",
-        source = click_src
-      )
+      .coverage_heatmap(filtered(), o$line, o$drug)
     })
 
-    # geom_tile renders as a single plotly heatmap trace, so the click reports
-    # numeric axis indices (x = column, y = row); map them back to labels using
-    # the same orderings the plot was drawn with.
+    # echarts4r reports a clicked tile's datum as {value: [cell_name, drug,
+    # log10cells]}, which arrives as a list with a `value` vector; read the
+    # labels off it (no numeric-index mapping needed).
     clicked <- reactiveVal(NULL)
-    observeEvent(plotly::event_data("plotly_click", source = click_src), {
-      d <- plotly::event_data("plotly_click", source = click_src)
-      if (is.null(d$x) || is.null(d$y)) {
-        return()
+    observeEvent(input$heatmap_clicked_data, {
+      d <- input$heatmap_clicked_data
+      if (is.list(d) && !is.null(d$value)) {
+        d <- d$value
       }
-      o <- orders()
-      xi <- round(as.numeric(d$x))
-      yi <- round(as.numeric(d$y))
-      if (
-        is.na(xi) ||
-          is.na(yi) ||
-          xi < 1 ||
-          yi < 1 ||
-          xi > length(o$line) ||
-          yi > length(o$drug)
-      ) {
+      if (is.null(d) || length(d) < 2) {
         return()
       }
       clicked(c(
-        drug = as.character(o$drug[[yi]]),
-        cell_name = as.character(o$line[[xi]])
+        drug = as.character(d[[2]]),
+        cell_name = as.character(d[[1]])
       ))
     })
 
@@ -256,7 +220,7 @@ coverage_server <- function(id) {
       }
     })
 
-    output$detail_plot <- plotly::renderPlotly({
+    output$detail_plot <- echarts4r::renderEcharts4r({
       cl <- clicked()
       validate(need(
         !is.null(cl),
@@ -264,7 +228,57 @@ coverage_server <- function(id) {
       ))
       g <- tahoe_cell_grid()
       rows <- g[g$drug == cl[[1]] & g$cell_name == cl[[2]], , drop = FALSE]
-      tahoe_plotly(.coverage_dose_bar(rows), tooltip = "text")
+      .coverage_dose_bar(rows)
     })
+
+    # --- Chat-assistant bridge: read and drive the matrix's drug/organ picks.
+    # These are server-side selectize inputs, so `set` re-sends the choices with
+    # the selection to make it stick.
+    cov_bridge_get <- function() {
+      cov <- isolate(coverage())
+      list(
+        filters = list(
+          drugs = list(
+            current = isolate(input$drugs),
+            options = sort(unique(cov$drug))
+          ),
+          organs = list(
+            current = isolate(input$organs),
+            options = sort(unique(cov$organ))
+          )
+        )
+      )
+    }
+    cov_bridge_set <- function(request) {
+      cov <- isolate(coverage())
+      ignored <- list()
+      apply_multi <- function(field, input_id, domain) {
+        v <- tahoe_bridge_validate(request[[field]], domain)
+        if (length(v$bad) > 0) {
+          ignored[[field]] <<- v$bad
+        }
+        if (!is.null(v$good)) {
+          updateSelectizeInput(
+            session,
+            input_id,
+            choices = domain,
+            selected = v$good,
+            server = TRUE
+          )
+        }
+      }
+      apply_multi("drugs", "drugs", sort(unique(cov$drug)))
+      apply_multi("organs", "organs", sort(unique(cov$organ)))
+      out <- list(applied = TRUE)
+      if (length(ignored) > 0) {
+        out$ignored <- ignored
+      }
+      out
+    }
+    tahoe_register_page_bridge(
+      session,
+      "coverage",
+      list(title = "Coverage", get = cov_bridge_get, set = cov_bridge_set)
+    )
   })
 }

@@ -96,50 +96,59 @@ test_that("tool suite is complete and every spec converts to an ellmer tool", {
   for (spec in tools) {
     expect_no_error(.tahoe_agent_ellmer_tool(spec))
   }
-  # The session-aware Subset builder tools convert too (session unused here).
-  for (spec in tahoe_subset_state_tools(session = NULL)) {
+  # The session-aware page-control tools convert too (session unused here).
+  for (spec in tahoe_page_control_tools(session = NULL)) {
     expect_no_error(.tahoe_agent_ellmer_tool(spec))
   }
 })
 
-test_that("subset state tools degrade gracefully and route through a bridge", {
-  tools <- tahoe_subset_state_tools(session = NULL)
+test_that("page-control tools degrade gracefully and route to the active page", {
+  tools <- tahoe_page_control_tools(session = NULL)
   nm <- vapply(tools, `[[`, "", "name")
-  expect_equal(nm, c("get_subset_selection", "set_subset_selection"))
+  expect_equal(
+    nm,
+    c("get_active_page", "get_page_controls", "set_page_controls")
+  )
   by <- stats::setNames(tools, nm)
 
-  # No session/bridge -> a friendly "not loaded" result, never an error.
-  expect_false(by[["get_subset_selection"]]$fun()$available)
-  expect_false(by[["set_subset_selection"]]$fun(drugs = "X")$applied)
+  # No session/bridges -> friendly results, never errors.
+  expect_equal(by[["get_active_page"]]$fun()$active_page, "unknown")
+  expect_false(by[["get_page_controls"]]$fun()$available)
+  expect_false(by[["set_page_controls"]]$fun(drugs = "X")$applied)
 
-  # With a fake bridge in a fake session's userData, calls route straight through
-  # and omitted dimensions arrive as NULL (leave-untouched semantics).
+  # A fake session with a registered "drugs" bridge and drugs as the active page:
+  # the tools resolve to it, route the request, and default to the active page.
   seen <- new.env()
-  fake_bridge <- list(
-    get = function() list(available = TRUE, selection = list(drugs = "D1")),
+  drugs_bridge <- list(
+    title = "Drugs",
+    get = function() list(filters = list(name = list(current = "x"))),
     set = function(request) {
       seen$request <- request
-      list(applied = TRUE, selection = list(drugs = request$drugs))
+      list(applied = TRUE)
     }
   )
-  fake_session <- list(userData = new.env())
-  fake_session$userData[[.tahoe_subset_bridge_key]] <- fake_bridge
-  routed <- stats::setNames(tahoe_subset_state_tools(fake_session), nm)
+  s <- list(userData = new.env())
+  s$userData[[.tahoe_page_bridges_key]] <- list(drugs = drugs_bridge)
+  s$userData[[.tahoe_active_page_key]] <- "drugs"
+  routed <- stats::setNames(tahoe_page_control_tools(s), nm)
 
-  expect_equal(routed[["get_subset_selection"]]$fun()$selection$drugs, "D1")
-  res <- routed[["set_subset_selection"]]$fun(drugs = c("D1", "D2"))
+  expect_equal(routed[["get_active_page"]]$fun()$active_page, "drugs")
+  expect_equal(routed[["get_active_page"]]$fun()$controllable_pages, "drugs")
+  # No `page` arg -> falls back to the active page ("drugs").
+  res <- routed[["set_page_controls"]]$fun(moa = c("A", "B"))
   expect_true(res$applied)
-  expect_equal(seen$request$drugs, c("D1", "D2"))
+  expect_equal(res$page, "drugs")
+  expect_equal(seen$request$moa, c("A", "B"))
   expect_null(seen$request$organs)
 })
 
-test_that("subset builder bridge reads, validates, and drives the selection", {
+test_that("subset builder registers a page bridge that validates and drives", {
   drug <- as.character(tahoe_drug()$drug[[1]])
   testServer(
     function(id) subset_builder_server(id),
     {
       session$flushReact()
-      bridge <- session$userData[[.tahoe_subset_bridge_key]]
+      bridge <- session$userData[[.tahoe_page_bridges_key]][["subset"]]
       expect_false(is.null(bridge))
 
       # get() reflects the current inputs and reports an estimate.
@@ -150,18 +159,59 @@ test_that("subset builder bridge reads, validates, and drives the selection", {
       expect_true(drug %in% st$selection$drugs)
       expect_type(st$estimated_cells, "integer")
 
-      # set() validates: a real drug sticks, a bogus one is ignored (not errored),
-      # and the applied selection + estimate come back.
+      # set() validates: a real drug sticks, a bogus one is ignored (not errored).
       res <- bridge$set(list(drugs = c(drug, "NoSuchDrug-999")))
       expect_true(res$applied)
       expect_true(drug %in% res$selection$drugs)
       expect_false("NoSuchDrug-999" %in% res$selection$drugs)
       expect_true("NoSuchDrug-999" %in% res$ignored$drugs)
-      expect_type(res$estimated_cells, "integer")
 
-      # An empty vector clears a dimension; NULL leaves others untouched.
+      # The canonical cross-page field (driver_genes) maps to `drivers`.
+      expect_no_error(bridge$set(list(driver_genes = character())))
+
+      # An empty vector clears a dimension.
       res2 <- bridge$set(list(drugs = character()))
       expect_length(res2$selection$drugs, 0)
+    }
+  )
+})
+
+test_that("the Drugs page registers a bridge that reads options and validates", {
+  moa <- .drug_choices(tahoe_drug(), "moa-broad")
+  skip_if(length(moa) == 0)
+  testServer(
+    function(id) drug_explorer_server(id),
+    {
+      session$flushReact()
+      bridge <- session$userData[[.tahoe_page_bridges_key]][["drugs"]]
+      expect_false(is.null(bridge))
+      st <- bridge$get()
+      expect_true(moa[[1]] %in% st$filters$moa$options)
+
+      res <- bridge$set(list(moa = c(moa[[1]], "NoSuchMOA-999"), name = "abc"))
+      expect_true(res$applied)
+      expect_true("NoSuchMOA-999" %in% res$ignored$moa)
+      # A field not passed is left untouched (no error, not reported).
+      expect_null(res$ignored$approval)
+    }
+  )
+})
+
+test_that("the Cell lines page registers a bridge over organ/gene filters", {
+  organ <- .cell_line_choices(tahoe_cell_line(), "Organ")
+  skip_if(length(organ) == 0)
+  testServer(
+    function(id) cell_line_explorer_server(id),
+    {
+      session$flushReact()
+      bridge <- session$userData[[.tahoe_page_bridges_key]][["cell_lines"]]
+      expect_false(is.null(bridge))
+      st <- bridge$get()
+      expect_true(organ[[1]] %in% st$filters$organs$options)
+
+      res <- bridge$set(list(organs = c(organ[[1]], "Nowhere-999")))
+      expect_true(res$applied)
+      expect_true("Nowhere-999" %in% res$ignored$organs)
     }
   )
 })
@@ -541,4 +591,31 @@ test_that("chat_agent_server surfaces a provider error instead of crashing", {
       expect_equal(n_turns(), 1L)
     }
   )
+})
+
+test_that("the assistant sidebar carries the chat and its collapsed settings", {
+  # Force the enabled path so the real chat UI (not the setup panel) is built.
+  withr::local_envvar(list(
+    TAHOE_AGENT_DISABLE = "",
+    TAHOE_AGENT_BYOK = "1",
+    TAHOE_AGENT_BYOK_PROVIDERS = "gemini,openai,anthropic"
+  ))
+  skip_if_not(tahoe_agent_packages_ok(), "assistant packages not installed")
+
+  dock <- as.character(chat_agent_ui("chat_dock"))
+  # The chat window plus the model / key controls, all one namespace, with the
+  # settings folded into an accordion section.
+  expect_match(dock, 'id="chat_dock-chat"', fixed = TRUE)
+  expect_match(dock, 'id="chat_dock-source"', fixed = TRUE)
+  expect_match(dock, 'id="chat_dock-api_key"', fixed = TRUE)
+  expect_match(dock, 'id="chat_dock-connect"', fixed = TRUE)
+  expect_match(dock, "accordion", fixed = TRUE)
+})
+
+test_that("the assistant UI degrades gracefully when disabled", {
+  withr::local_envvar(list(TAHOE_AGENT_DISABLE = "1"))
+  # No chat window; the setup panel is shown instead of erroring.
+  dock <- as.character(chat_agent_ui("chat_dock"))
+  expect_false(grepl('id="chat_dock-chat"', dock, fixed = TRUE))
+  expect_no_error(dock)
 })

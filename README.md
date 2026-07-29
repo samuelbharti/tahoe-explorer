@@ -12,9 +12,11 @@ to load 2.29 GB into memory.
 ## Requirements
 
 - R (>= 4.3)
-- Packages: `shiny`, `bslib`, `brand.yml`, `duckdb`, `dplyr`, `stringr`,
-  `ggplot2`, `scales`, `janitor`, `reactable`, `plotly`, `DiagrammeR` (managed
-  with `renv` recommended)
+- Packages: `shiny`, `bslib`, `duckdb`, `dplyr`, `stringr`, `echarts4r`
+  (charts), `plotly`, `ggplot2`, `scales`, `janitor`, `reactable`, `cicerone`
+  (guided tours), `DiagrammeR` (About-tab diagrams), and `ltc` (chart palettes,
+  from GitHub). `renv` is recommended — `renv::restore()` installs the exact
+  set, including the GitHub `ltc` package.
 
 ## Installation
 
@@ -32,9 +34,14 @@ renv::restore()
 
 ```r
 install.packages(c(
-  "shiny", "bslib", "brand.yml", "duckdb", "dplyr", "stringr",
-  "ggplot2", "scales", "janitor", "reactable", "plotly", "DiagrammeR"
+  "shiny", "bslib", "duckdb", "dplyr", "stringr", "ggplot2",
+  "echarts4r", "plotly", "scales", "janitor", "reactable",
+  "cicerone", "DiagrammeR"
 ))
+
+# `ltc` (chart palettes) is on GitHub, not CRAN:
+# install.packages("remotes")
+# remotes::install_github("loukesio/ltc-color-palettes")
 ```
 
 ## Data
@@ -89,29 +96,35 @@ shiny::runApp()
 
 Or open the project in RStudio and click Run App.
 
-## AI assistant (Chat tab)
+## AI assistant
 
-An optional **Chat** tab adds a Gemini-backed assistant (via `ellmer` and
-`shinychat` on Google Vertex AI) that can explain the Tahoe-100M dataset and this
-app, and — most usefully — help you plan a subset: describe your research question
-and it recommends which filters and columns to pick, then returns the same
-reproducible R + Python pull recipe as the **Subset builder** tab. It answers only
-from a set of hand-written tools over the app's metadata, so it does not fabricate
-numbers; no tool can read files, environment variables, or secrets.
+An optional **Tahoe assistant** — a collapsible left sidebar available on every
+page, toggled by the **Assistant** button in the navbar — adds a Gemini-backed
+assistant (via `ellmer` and `shinychat` on Google Vertex AI) that can explain the
+Tahoe-100M dataset and this app, and — most usefully — help you plan a subset:
+describe your research question and it recommends which filters and columns to
+pick, then returns the same reproducible R + Python pull recipe as the **Subset
+builder** tab. It is also **page-aware**: it knows which tab you're on and can
+apply filters / selections for you on the interactive pages (Drugs, Cell lines,
+Subset builder, Coverage, Samples & cells) — e.g. "select the breast-cancer
+drugs". It answers only from a set of hand-written tools over the app's metadata,
+so it does not fabricate numbers; no tool can read files, environment variables,
+or secrets.
 
 The assistant is **off by default and degrades gracefully**: until it is
-configured (and `ellmer` + `shinychat` are installed), the Chat tab shows a short
+configured (and `ellmer` + `shinychat` are installed), the sidebar shows a short
 setup panel and the rest of the app is unaffected. Nothing about the assistant is
-loaded unless the tab is enabled.
+loaded unless it is enabled.
 
 It can be powered two ways, chosen live from a **Model source** selector in the
-chat sidebar: a **shared** assistant the operator configures on Google Vertex
-(below), and/or **bring your own key** — each user pastes their own Gemini,
-OpenAI, or Anthropic key, held only in their browser session and never stored or
-logged. Either path alone is enough to enable the tab. With your own key you can
-pick a model from a short curated list or click **List models for this key** to
-load the provider's current, key-scoped models (so the picker never offers a
-model your account can't use) — or just type any model id and press Enter.
+sidebar's collapsible **Model & key** section: a **shared** assistant the
+operator configures on Google Vertex (below), and/or **bring your own key** —
+each user pastes their own Gemini, OpenAI, or Anthropic key, held only in their
+browser session and never stored or logged. Either path alone is enough to enable
+the assistant. With your own key you can pick a model from a short curated list or
+click **List models for this key** to load the provider's current, key-scoped
+models (so the picker never offers a model your account can't use) — or just type
+any model id and press Enter.
 
 To configure the shared assistant:
 
@@ -129,16 +142,16 @@ To configure the shared assistant:
 
 Configuration via environment variables:
 
-- `TAHOE_VERTEX_PROJECT` — GCP project with Vertex AI enabled (required to turn
-  the tab on). The aliases `VERTEX_PROJECT_ID`, `GOOGLE_CLOUD_PROJECT`, and
-  `GCLOUD_PROJECT` are also accepted.
+- `TAHOE_VERTEX_PROJECT` — GCP project with Vertex AI enabled (required to enable
+  the shared assistant). The aliases `VERTEX_PROJECT_ID`, `GOOGLE_CLOUD_PROJECT`,
+  and `GCLOUD_PROJECT` are also accepted.
 - `TAHOE_VERTEX_LOCATION` — Vertex region (default `us-central1`); the alias
   `VERTEX_LOCATION` is also accepted.
 - `TAHOE_VERTEX_MODEL` — Gemini model id (default `gemini-2.5-flash`).
 - `TAHOE_AGENT_TEMPERATURE` — sampling temperature (default `0.2`, for factual
   answers).
-- `TAHOE_AGENT_DISABLE` — set to `1` to force the tab off even when configured
-  (the test suite sets this).
+- `TAHOE_AGENT_DISABLE` — set to `1` to force the assistant off even when
+  configured (the test suite sets this).
 - `TAHOE_AGENT_BYOK` — set to `0` to remove the bring-your-own-key option (on by
   default whenever the packages are installed).
 - `TAHOE_AGENT_BYOK_PROVIDERS` — comma list of BYOK providers to offer (default

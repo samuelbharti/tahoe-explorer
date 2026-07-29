@@ -17,7 +17,8 @@ if (!requireNamespace("renv", quietly = TRUE)) {
 
 # Runtime dependencies: global.R's library() calls plus pkg:: usage across R/,
 # modules/, and userInterface/. Base packages (utils/stats/grDevices) are
-# omitted. DiagrammeR renders the About architecture diagram.
+# omitted. echarts4r renders every chart; cicerone drives the guided tours; ltc
+# (GitHub) supplies the chart palettes; DiagrammeR renders the About diagrams.
 runtime <- c(
   "shiny",
   "bslib",
@@ -27,14 +28,17 @@ runtime <- c(
   "scales",
   "janitor",
   "reactable",
+  "echarts4r",
   "plotly",
+  "cicerone",
+  "loukesio/ltc-color-palettes", # ltc palettes (GitHub, not on CRAN)
   "DBI",
   "duckdb",
   "DiagrammeR",
-  # AI assistant (Chat tab). Optional at runtime -- the tab is gated and the app
-  # loads fine without these -- but a deployment that enables it needs them in
-  # the lockfile. gargle (Vertex ADC auth) and coro (streaming) come in as
-  # transitive deps of ellmer.
+  # AI assistant (a sidebar on every page). Optional at runtime -- it is gated
+  # and the app loads fine without these -- but a deployment that enables it
+  # needs them in the lockfile. gargle (Vertex ADC auth) and coro (streaming)
+  # come in as transitive deps of ellmer.
   "ellmer",
   "shinychat"
 )
