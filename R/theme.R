@@ -77,7 +77,7 @@ tahoe_theme <- function(base_size = 14) {
 #' which aesthetics appear on hover (defaults to x + y). Chrome is stripped to
 #' a small mode bar (hover, zoom, PNG download) with no plotly logo. Pass a
 #' `source` id to make the chart emit click events readable in a Shiny server
-#' with `plotly::event_data("plotly_click", source = <id>)` — pair it with a
+#' with `plotly::event_data("plotly_click", source = <id>)` -- pair it with a
 #' `key` aesthetic on the marks so the click carries the clicked category.
 tahoe_plotly <- function(p, tooltip = c("x", "y"), source = NULL) {
   src <- if (is.null(source)) "A" else source
@@ -436,7 +436,7 @@ tahoe_echart_heatmap <- function(
   e
 }
 
-#' Alpine Lake reactable theme — shared look for every table in the app: Inter
+#' Alpine Lake reactable theme -- shared look for every table in the app: Inter
 #' type, teal highlights, restrained hairline borders, tabular figures.
 tahoe_reactable_theme <- function() {
   reactable::reactableTheme(

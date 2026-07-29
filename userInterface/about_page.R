@@ -1,4 +1,4 @@
-# About tab — the "what is Tahoe-100M?" explainer, second in the navbar.
+# About tab -- the "what is Tahoe-100M?" explainer, second in the navbar.
 
 register_page(
   id = "about",

@@ -112,7 +112,7 @@ about_ui <- function(id) {
       bslib::card_footer(
         class = "text-muted small",
         paste(
-          "Counts reflect the data currently loaded — the bundled demo",
+          "Counts reflect the data currently loaded -- the bundled demo",
           "fixtures unless you have downloaded the real metadata (see the",
           "provenance badge, top-right). The figures elsewhere on this page",
           "describe the full published Tahoe-100M dataset."
@@ -128,7 +128,7 @@ about_ui <- function(id) {
         tags$p(
           class = "text-muted small mt-2 mb-0",
           "All 50 cell lines are pooled into every sample, so a sample is one",
-          "drug at one dose on one plate — not a single cell line."
+          "drug at one dose on one plate -- not a single cell line."
         )
       ),
       bslib::card(
@@ -150,49 +150,49 @@ about_ui <- function(id) {
           "drug_metadata (379 drugs)",
           "One row per perturbing compound.",
           c(
-            "<code>drug</code> — compound name",
-            "<code>targets</code> — known protein targets",
-            "<code>moa-broad</code> / <code>moa-fine</code> — mechanism of action",
-            "<code>human-approved</code>, <code>clinical-trials</code> — status",
-            "<code>canonical_smiles</code>, <code>pubchem_cid</code> — structure"
+            "<code>drug</code> -- compound name",
+            "<code>targets</code> -- known protein targets",
+            "<code>moa-broad</code> / <code>moa-fine</code> -- mechanism of action",
+            "<code>human-approved</code>, <code>clinical-trials</code> -- status",
+            "<code>canonical_smiles</code>, <code>pubchem_cid</code> -- structure"
           )
         ),
         .about_table_panel(
           "cell_line_metadata (driver-level)",
           paste(
-            "Driver-mutation annotations — many rows per cell line",
+            "Driver-mutation annotations -- many rows per cell line",
             "(~102 annotated lines; 50 were assayed)."
           ),
           c(
-            "<code>cell_name</code> — cell line",
-            "<code>Organ</code> — tissue of origin",
-            "<code>Driver_Gene_Symbol</code>, <code>Driver_VarType</code> — driver mutation",
-            "<code>Cell_ID_DepMap</code>, <code>Cell_ID_Cellosaur</code> — external IDs"
+            "<code>cell_name</code> -- cell line",
+            "<code>Organ</code> -- tissue of origin",
+            "<code>Driver_Gene_Symbol</code>, <code>Driver_VarType</code> -- driver mutation",
+            "<code>Cell_ID_DepMap</code>, <code>Cell_ID_Cellosaur</code> -- external IDs"
           )
         ),
         .about_table_panel(
           "sample_metadata (1,344 samples)",
           "One row per drug x dose x plate condition.",
           c(
-            "<code>sample</code>, <code>plate</code> — identifiers",
-            "<code>drug</code>, <code>drugname_drugconc</code> — treatment + dose",
+            "<code>sample</code>, <code>plate</code> -- identifiers",
+            "<code>drug</code>, <code>drugname_drugconc</code> -- treatment + dose",
             paste(
               "<code>mean_gene_count</code>, <code>mean_tscp_count</code>,",
-              "<code>mean_pcnt_mito</code> — per-sample QC means"
+              "<code>mean_pcnt_mito</code> -- per-sample QC means"
             )
           )
         ),
         .about_table_panel(
           "obs_metadata (~100.6M cells)",
-          "One row per cell — the full cell-level table (~2.29 GB).",
+          "One row per cell -- the full cell-level table (~2.29 GB).",
           c(
             "<code>drug</code>, <code>cell_line</code>, <code>plate</code>, <code>sample</code>",
-            "<code>drugname_drugconc</code> — encodes the dose",
+            "<code>drugname_drugconc</code> -- encodes the dose",
             paste(
               "<code>gene_count</code>, <code>tscp_count</code>,",
-              "<code>pcnt_mito</code>, <code>pass_filter</code> — QC"
+              "<code>pcnt_mito</code>, <code>pass_filter</code> -- QC"
             ),
-            "<code>S_score</code>, <code>G2M_score</code>, <code>phase</code> — cell cycle"
+            "<code>S_score</code>, <code>G2M_score</code>, <code>phase</code> -- cell cycle"
           )
         ),
         .about_table_panel(
@@ -212,7 +212,7 @@ about_ui <- function(id) {
           tags$dt("Plate"),
           tags$dd(
             class = "text-muted",
-            "A 96-well experimental batch. There are 14; each holds ~93–95",
+            "A 96-well experimental batch. There are 14; each holds ~93-95",
             "drug treatments plus DMSO_TF vehicle-control wells."
           ),
           tags$dt("Dose"),
@@ -249,14 +249,14 @@ about_ui <- function(id) {
       id = ns("tour_using"),
       bslib::card_header("Using this app"),
       tags$ul(
-        tags$li(tags$b("Overview"), " — headline dimensions and quick charts"),
-        tags$li(tags$b("Drugs"), " — filter drugs by MOA, approval, target"),
-        tags$li(tags$b("Cell lines"), " — filter by organ, driver, variant"),
+        tags$li(tags$b("Overview"), " -- headline dimensions and quick charts"),
+        tags$li(tags$b("Drugs"), " -- filter drugs by MOA, approval, target"),
+        tags$li(tags$b("Cell lines"), " -- filter by organ, driver, variant"),
         tags$li(
           tags$b("Samples & cells"),
-          " — sample QC + lazy cell aggregation"
+          " -- sample QC + lazy cell aggregation"
         ),
-        tags$li(tags$b("Subset builder"), " — plan a slice + export a recipe")
+        tags$li(tags$b("Subset builder"), " -- plan a slice + export a recipe")
       ),
       tags$hr(),
       tags$p(
@@ -316,10 +316,10 @@ about_server <- function(id) {
     output$dims <- renderUI({
       cc <- counts()
       fmt <- function(x) {
-        if (is.null(x) || is.na(x)) "—" else format(x, big.mark = ",")
+        if (is.null(x) || is.na(x)) "-" else format(x, big.mark = ",")
       }
       cells <- if (is.null(cc$cells) || is.na(cc$cells)) {
-        "—"
+        "-"
       } else {
         scales::label_number(
           accuracy = 0.1,

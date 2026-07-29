@@ -219,14 +219,14 @@
   intro <- if (is.null(title) || identical(page, "overview")) {
     paste(
       "Hi! I can explain the **Tahoe-100M** dataset and this app, and help",
-      "you plan a subset for your analysis. Try one of these — or just ask:"
+      "you plan a subset for your analysis. Try one of these -- or just ask:"
     )
   } else {
     paste0(
       "Hi! You're on the **",
       title,
-      "** page — I can answer questions and drive its controls for you. ",
-      "Try one of these — or just ask:"
+      "** page -- I can answer questions and drive its controls for you. ",
+      "Try one of these -- or just ask:"
     )
   }
   bullets <- paste0(
@@ -437,7 +437,7 @@ chat_agent_server <- function(
           status(list(
             ok = FALSE,
             msg = paste(
-              "A key was found in your environment — pick a model and click",
+              "A key was found in your environment -- pick a model and click",
               "Connect (no need to paste)."
             )
           ))
@@ -625,7 +625,7 @@ chat_agent_server <- function(
         if (env_found) {
           tags$p(
             class = "small text-success mb-1",
-            "✓ A key was found in your environment — leave the field",
+            "✓ A key was found in your environment -- leave the field",
             " blank and just pick a model and Connect."
           )
         }

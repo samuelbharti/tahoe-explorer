@@ -32,8 +32,8 @@ overview_tour <- function() {
         el = "overview-tour_summary",
         title = "Dataset at a glance",
         description = paste(
-          "The headline dimensions of Tahoe-100M — cells, cell lines, drugs,",
-          "samples, plates, and genes — computed from the data you have loaded."
+          "The headline dimensions of Tahoe-100M -- cells, cell lines, drugs,",
+          "samples, plates, and genes -- computed from the data you have loaded."
         ),
         position = "bottom"
       ),
@@ -76,7 +76,7 @@ about_tour <- function() {
         el = "about-tour_glance",
         title = "The numbers",
         description = paste(
-          "Live dataset dimensions and what each one means — a quick orientation",
+          "Live dataset dimensions and what each one means -- a quick orientation",
           "before you dive in."
         ),
         position = "bottom"
@@ -94,7 +94,7 @@ about_tour <- function() {
         el = "about-tour_tables",
         title = "The metadata tables",
         description = paste(
-          "Expand each table to see its columns — drugs, cell lines, samples,",
+          "Expand each table to see its columns -- drugs, cell lines, samples,",
           "obs, and genes. This app reads the small tables and aggregates obs",
           "lazily."
         ),
@@ -160,7 +160,7 @@ drug_tour <- function() {
         title = "Target mutations",
         description = paste(
           "Which assayed cell lines carry a somatic variant in the drug's target",
-          "genes — the lines where a mutant-vs-wild-type contrast could be",
+          "genes -- the lines where a mutant-vs-wild-type contrast could be",
           "designed."
         ),
         position = "left"
@@ -170,7 +170,7 @@ drug_tour <- function() {
         title = "Summary charts",
         description = paste(
           "Mechanism, approval, and top targets across the filtered set. The",
-          "selected drug's categories are highlighted — and clicking any bar",
+          "selected drug's categories are highlighted -- and clicking any bar",
           "filters the table by that category."
         ),
         position = "left"
@@ -241,7 +241,7 @@ obs_tour <- function() {
         title = "Two views",
         description = paste(
           "Switch between Samples & plates (per-sample QC) and Cell-level obs,",
-          "which aggregates the ~100M-row cell table lazily in duckdb — raw cells",
+          "which aggregates the ~100M-row cell table lazily in duckdb -- raw cells",
           "are never loaded."
         ),
         position = "bottom"
@@ -292,7 +292,7 @@ coverage_tour <- function() {
         title = "Coverage heatmap",
         description = paste(
           "Each tile is one drug × cell line; color is the number of cells",
-          "profiled (log scale) — darker means more statistical power. Click a",
+          "profiled (log scale) -- darker means more statistical power. Click a",
           "tile to break it down by dose."
         ),
         position = "left"
@@ -343,7 +343,7 @@ qc_tour <- function() {
         title = "Controls & batch structure",
         description = paste(
           "DMSO vehicle-control coverage per cell line, and how drugs map onto",
-          "the 14 plates — both matter for confounding."
+          "the 14 plates -- both matter for confounding."
         ),
         position = "top"
       ),
@@ -351,7 +351,7 @@ qc_tour <- function() {
         el = "qc-tour_phase",
         title = "Cell-cycle composition",
         description = paste(
-          "The share of cells in each cell-cycle phase by organ — a phenotype",
+          "The share of cells in each cell-cycle phase by organ -- a phenotype",
           "worth accounting for before differential expression."
         ),
         position = "top"
@@ -396,7 +396,7 @@ subset_tour <- function() {
         el = "subset-tour_export",
         title = "Export & recipe",
         description = paste(
-          "Download the matched samples, and get a reproducible analysis recipe —",
+          "Download the matched samples, and get a reproducible analysis recipe --",
           "copy-paste code or a ready-to-run R / Python notebook that pulls this",
           "exact subset from the full dataset."
         ),
@@ -423,7 +423,7 @@ genes_tour <- function() {
         el = "genes-tour_summary",
         title = "How many genes",
         description = paste(
-          "The number of measured features, and — once you run a lookup — how",
+          "The number of measured features, and -- once you run a lookup -- how",
           "many of your genes were found versus missing."
         ),
         position = "bottom"

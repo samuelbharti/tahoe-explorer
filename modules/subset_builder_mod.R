@@ -125,7 +125,7 @@ subset_builder_ui <- function(id) {
     div(
       class = "text-muted small mb-2",
       tags$strong("How the experiment is laid out: "),
-      "14 plates (96-well), each a batch of ~93–95 drug treatments; ",
+      "14 plates (96-well), each a batch of ~93-95 drug treatments; ",
       tags$code("DMSO_TF"),
       " is the vehicle control on every plate. Doses are 0.05 / 0.5 / 5 µM. ",
       "All 50 cell lines are pooled into every sample, so tissue / driver / ",
@@ -167,7 +167,7 @@ subset_builder_ui <- function(id) {
 # Compact format for large counts (e.g. 28.5M) so value boxes don't wrap.
 .subset_fmt_big <- function(x) {
   if (length(x) != 1 || is.na(x)) {
-    return("—")
+    return("-")
   }
   scales::label_number(accuracy = 0.1, scale_cut = scales::cut_short_scale())(x)
 }

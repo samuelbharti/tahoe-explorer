@@ -1,4 +1,4 @@
-# Genes tab — searchable lookup of the measured features (gene metadata).
+# Genes tab -- searchable lookup of the measured features (gene metadata).
 
 register_page(
   id = "genes",

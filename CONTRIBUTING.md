@@ -39,9 +39,9 @@
 
 This repo is a project template. Two files drive turning it into a real project:
 
-- `template.yml` — the manifest: variables, find/replace targets, files to
+- `template.yml` -- the manifest: variables, find/replace targets, files to
   strip, and files to reset. This is the single source of truth.
-- `dev/use_template.R` — a generic engine that applies the manifest. It is
+- `dev/use_template.R` -- a generic engine that applies the manifest. It is
   called by a human (`Rscript dev/use_template.R --project_name="..."`) or
   programmatically by an initializer package (`use_template(values = ...)`).
 
@@ -49,7 +49,7 @@ Keep the manifest, not the engine, as the place to encode template decisions.
 Template-only identity (citation files, the Zenodo badge, the "How to cite"
 section) lives inside `<!-- template:strip:start --> ... :end -->` markers so it
 is removed on init. If you mirror this template into a package's `inst/`, treat
-that copy as a generated mirror of a tagged release — never hand-edit it.
+that copy as a generated mirror of a tagged release -- never hand-edit it.
 
 ## Continuous Integration
 

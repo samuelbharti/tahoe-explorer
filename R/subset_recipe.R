@@ -6,7 +6,7 @@
 # recipe() reactive; the string output is unchanged (guarded by
 # tests/testthat/test-subset-builder.R).
 
-# Public obs parquet on HuggingFace — the source the generated code reads from,
+# Public obs parquet on HuggingFace -- the source the generated code reads from,
 # so the snippets run without pre-downloading anything. Pinned to the dataset
 # revision (defined in R/data.R, sourced before this file).
 .subset_obs_hf <- sprintf(
@@ -21,7 +21,7 @@
 
 # Format an integer for display, with an em dash for NA / unknown.
 .subset_fmt <- function(x) {
-  if (length(x) != 1 || is.na(x)) "—" else format(x, big.mark = ",")
+  if (length(x) != 1 || is.na(x)) "-" else format(x, big.mark = ",")
 }
 
 # Render a character vector as a single-quoted SQL IN list, e.g. ('a', 'b').
@@ -127,11 +127,11 @@ tahoe_subset_matched_lines <- function(sel, grid, lines_tbl) {
 # how to supply a Hugging Face token for gated or rate-limited access.
 .subset_r_preamble <- function() {
   paste(
-    "# ── Setup (uncomment to install) ─────────────────────────────",
+    "# -- Setup (uncomment to install) -----------------------------",
     '# install.packages(c("duckdb", "DBI"))',
     "# Reproducible, project-local library (recommended):",
     '# install.packages("renv"); renv::init()',
-    "# Hugging Face token — the obs parquet is public, but a token avoids",
+    "# Hugging Face token -- the obs parquet is public, but a token avoids",
     "# rate limits and unlocks gated files. Create one at",
     "# https://huggingface.co/settings/tokens, then add HF_TOKEN to a project",
     '# .Renviron file (or run Sys.setenv(HF_TOKEN = "hf_...")) and register it',
@@ -143,11 +143,11 @@ tahoe_subset_matched_lines <- function(sel, grid, lines_tbl) {
 
 .subset_py_preamble <- function() {
   paste(
-    "# ── Setup (uncomment to install) ─────────────────────────────",
+    "# -- Setup (uncomment to install) -----------------------------",
     "# pip install duckdb scanpy huggingface_hub",
     "# Isolated environment (recommended):",
     "# python -m venv .venv && source .venv/bin/activate   # or: uv venv",
-    "# Hugging Face token — the obs parquet is public, but a token avoids",
+    "# Hugging Face token -- the obs parquet is public, but a token avoids",
     "# rate limits and unlocks gated files. Create one at",
     "# https://huggingface.co/settings/tokens, then add HF_TOKEN to a .env /",
     "# environment file, or authenticate in Python:",
@@ -241,7 +241,7 @@ tahoe_subset_recipe <- function(
   r_predicate <- paste(r_where, collapse = "\n    AND ")
 
   header <- paste(
-    "# ── Estimated subset ─────────────────────────────────────────",
+    "# -- Estimated subset -----------------------------------------",
     sprintf(
       "# ~%s cells across %s samples · ~%s MB of obs metadata to scan.",
       .subset_fmt(est$cells),
@@ -254,7 +254,7 @@ tahoe_subset_recipe <- function(
     sep = "\n"
   )
   r_snippet <- paste(
-    "## R (duckdb) — pull the subset's cell-level metadata ---------",
+    "## R (duckdb) -- pull the subset's cell-level metadata ---------",
     .subset_r_preamble(),
     "",
     "library(duckdb); library(DBI)",
@@ -269,7 +269,7 @@ tahoe_subset_recipe <- function(
     sep = "\n"
   )
   py_snippet <- paste(
-    "## Python (duckdb) — pull the subset's cell-level metadata -----",
+    "## Python (duckdb) -- pull the subset's cell-level metadata -----",
     .subset_py_preamble(),
     "",
     "import duckdb",
@@ -304,7 +304,7 @@ tahoe_subset_recipe <- function(
 #
 # The same subset recipe, packaged as a ready-to-open notebook so a user can
 # download a scaffold rather than copy-pasting. Each document is single-language
-# — R (duckdb) or Python (scanpy) — chosen by the caller, so an R and a Python
+# -- R (duckdb) or Python (scanpy) -- chosen by the caller, so an R and a Python
 # step are never mixed in one file; the Jupyter export uses the matching kernel
 # (IRkernel for R, python3 for Python). The code chunks are marked
 # non-evaluating (they hit the network / reference a placeholder h5ad path), so

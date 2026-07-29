@@ -50,7 +50,7 @@ qc_ui <- function(id) {
             .info_pop(
               paste(
                 "Treatment conditions (drug × cell line × dose) with fewer cells",
-                "than the threshold above — the smallest are most at risk of",
+                "than the threshold above -- the smallest are most at risk of",
                 "unstable differential-expression estimates. Raise the threshold",
                 "to be more conservative."
               ),
@@ -71,7 +71,7 @@ qc_ui <- function(id) {
             .info_pop(
               paste(
                 "Drug × cell-line combinations missing one or more of the three",
-                "doses (0.05 / 0.5 / 5 µM) — dose-response analyses for these are",
+                "doses (0.05 / 0.5 / 5 µM) -- dose-response analyses for these are",
                 "limited."
               ),
               title = "Incomplete dose series"
@@ -111,7 +111,7 @@ qc_ui <- function(id) {
             paste(
               "How cell lines and drugs map onto the plates. If a drug sits",
               "on only a few plates, its signal is confounded with those",
-              "plates — compare it against DMSO controls from the same plates."
+              "plates -- compare it against DMSO controls from the same plates."
             ),
             title = "Plate / batch structure"
           )
@@ -333,7 +333,7 @@ qc_server <- function(id) {
         "cells"
       }
       fmt <- function(x) {
-        if (is.na(x)) "—" else format(x, big.mark = ",")
+        if (is.na(x)) "-" else format(x, big.mark = ",")
       }
       boxes <- list(
         bslib::value_box(
@@ -446,7 +446,7 @@ qc_server <- function(id) {
         if (balanced) {
           sprintf(
             paste(
-              "All %d cell lines appear on all %d plates — no cell-line/plate",
+              "All %d cell lines appear on all %d plates -- no cell-line/plate",
               "confounding. Drugs, however, vary (below): pair each with",
               "same-plate DMSO controls."
             ),
@@ -455,7 +455,7 @@ qc_server <- function(id) {
           )
         } else {
           sprintf(
-            "Cell lines span %d–%d plates; check for batch imbalance.",
+            "Cell lines span %d-%d plates; check for batch imbalance.",
             min(per_line),
             max(per_line)
           )

@@ -7,7 +7,7 @@
 # Local config/secrets
 .Renviron
 
-# Google Cloud / Vertex credentials — never commit; the app uses gcloud ADC
+# Google Cloud / Vertex credentials -- never commit; the app uses gcloud ADC
 application_default_credentials.json
 gha-creds-*.json
 *-sa.json
@@ -20,7 +20,7 @@ renv/staging/
 # Local development helpers
 dev/.Rhistory
 
-# Downloaded Tahoe metadata — never commit real data (only synthetic fixtures)
+# Downloaded Tahoe metadata -- never commit real data (only synthetic fixtures)
 /data/**
 !/data/.gitkeep
 !/data/fixtures/

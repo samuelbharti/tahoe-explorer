@@ -2,16 +2,16 @@
 
 ```txt
 .
-├── global.R
-├── ui.R
-├── server.R
-├── R/
-├── modules/
-├── userInterface/
-├── data/
-├── dev/
-├── docs/
-└── www/
+├-- global.R
+├-- ui.R
+├-- server.R
+├-- R/
+├-- modules/
+├-- userInterface/
+├-- data/
+├-- dev/
+├-- docs/
+└-- www/
 ```
 
 ## Notes

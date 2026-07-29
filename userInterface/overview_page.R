@@ -1,4 +1,4 @@
-# Overview tab — registered first in the navbar.
+# Overview tab -- registered first in the navbar.
 
 register_page(
   id = "overview",

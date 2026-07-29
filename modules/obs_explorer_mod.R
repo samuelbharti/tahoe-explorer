@@ -1,9 +1,9 @@
 # Samples & cell-level obs explorer module.
 #
 # Two sections:
-#   1. Samples/plates — always available, backed by the small sample_metadata
+#   1. Samples/plates -- always available, backed by the small sample_metadata
 #      table. Filter by plate and drug, add parsed dose, chart and export.
-#   2. Cell-level obs — a lazy, guarded summary over the huge cell-level obs
+#   2. Cell-level obs -- a lazy, guarded summary over the huge cell-level obs
 #      table via tahoe_obs_summary(), which aggregates in duckdb and never
 #      pulls raw cells into R. When the source is remote (HuggingFace) the
 #      query is gated behind a "Run query" button so nothing heavy fires on

@@ -48,7 +48,7 @@ coverage_ui <- function(id) {
       full_screen = TRUE,
       bslib::card_header(
         class = "d-flex justify-content-between align-items-center",
-        span("Cells profiled — drug × cell line"),
+        span("Cells profiled -- drug × cell line"),
         div(
           class = "d-flex gap-2 align-items-center",
           tahoe_plot_refresh_ui(ns("refresh_plots")),
@@ -209,10 +209,10 @@ coverage_server <- function(id) {
     output$detail_title <- renderUI({
       cl <- clicked()
       if (is.null(cl)) {
-        span("Dose breakdown — click a tile")
+        span("Dose breakdown -- click a tile")
       } else {
         tagList(
-          "Dose breakdown — ",
+          "Dose breakdown -- ",
           tags$strong(cl[[1]]),
           " × ",
           tags$strong(cl[[2]])

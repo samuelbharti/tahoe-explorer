@@ -1,7 +1,7 @@
 # Data-provenance badge for the navbar.
 #
 # A persistent chip, visible on every tab, that tells the user whether the
-# numbers on screen are real Tahoe-100M data or the bundled synthetic fixtures —
+# numbers on screen are real Tahoe-100M data or the bundled synthetic fixtures --
 # so the offline demo is never mistaken for the real dataset. Uses only cheap
 # checks (the small-table source attribute + obs source resolution); it never
 # triggers a data scan, so it is safe to build at app startup.
@@ -34,7 +34,7 @@ tahoe_provenance_badge <- function() {
     label <- "Demo fixtures"
     cls <- "text-bg-secondary"
     tip <- paste(
-      "Showing bundled synthetic fixtures — download the metadata for real",
+      "Showing bundled synthetic fixtures -- download the metadata for real",
       "Tahoe-100M numbers (see the README)."
     )
   }

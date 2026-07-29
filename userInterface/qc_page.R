@@ -1,4 +1,4 @@
-# QC tab — experimental-design guardrails to check before running an analysis.
+# QC tab -- experimental-design guardrails to check before running an analysis.
 
 register_page(
   id = "qc",

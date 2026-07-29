@@ -645,7 +645,7 @@ tahoe_cell_grid <- function() {
 #' Coverage summary derived from the cell grid: total cells per (drug x cell
 #' line), the set of non-zero doses tested, how many of the 3 doses are present,
 #' and the number of plates. Powers the coverage matrix and QC views. `DMSO_TF`
-#' (the vehicle control, dose 0) is kept — its coverage matters for QC.
+#' (the vehicle control, dose 0) is kept -- its coverage matters for QC.
 tahoe_coverage <- function() {
   g <- tahoe_cell_grid()
   if (nrow(g) == 0) {

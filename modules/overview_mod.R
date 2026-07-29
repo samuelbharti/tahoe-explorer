@@ -117,7 +117,7 @@ overview_ui <- function(id) {
           .info_pop(
             paste(
               "How the selected cell line's driver mutations break down by",
-              "variant class — missense, deletion, frameshift, and so on."
+              "variant class -- missense, deletion, frameshift, and so on."
             ),
             title = "Variant classes"
           )
@@ -250,11 +250,11 @@ overview_server <- function(id) {
     output$summary_boxes <- renderUI({
       cc <- counts()
       fmt <- function(x) {
-        if (is.null(x) || is.na(x)) "—" else format(x, big.mark = ",")
+        if (is.null(x) || is.na(x)) "-" else format(x, big.mark = ",")
       }
       fmt_big <- function(x) {
         if (is.null(x) || is.na(x)) {
-          return("—")
+          return("-")
         }
         scales::label_number(
           accuracy = 0.1,
@@ -272,7 +272,7 @@ overview_server <- function(id) {
           "(HuggingFace)."
         ),
         fixture = paste(
-          "Showing synthetic demo fixtures — download the metadata for",
+          "Showing synthetic demo fixtures -- download the metadata for",
           "real numbers (see the README)."
         ),
         cc$obs_source
@@ -320,10 +320,10 @@ overview_server <- function(id) {
     output$table_title <- renderUI({
       organ <- selected_organ()
       if (is.null(organ)) {
-        span("Cell lines — all organs")
+        span("Cell lines -- all organs")
       } else {
         tagList(
-          "Cell lines — ",
+          "Cell lines -- ",
           span(class = "badge text-bg-primary", organ)
         )
       }

@@ -12,7 +12,7 @@ through [bslib](https://rstudio.github.io/bslib/).
 - [ui.R](../ui.R) calls `bslib::bs_theme(brand = TRUE)`, which discovers
   `_brand.yml` at the app root and applies it to the whole UI.
 - `brand = TRUE` requires the file to exist (a clear contract). To make it
-  optional, use `bslib::bs_theme()` instead — it applies `_brand.yml` if found
+  optional, use `bslib::bs_theme()` instead -- it applies `_brand.yml` if found
   and is a no-op otherwise.
 
 ## Customizing
@@ -49,11 +49,11 @@ install.packages("thematic")
 [global.R](../global.R) already calls `thematic::thematic_shiny(font = "auto")`
 when the package is installed, so no further wiring is required. To also render
 custom or Google fonts (such as Inter) in plots, install
-[`showtext`](https://github.com/yixuan/showtext) — without it, thematic applies
+[`showtext`](https://github.com/yixuan/showtext) -- without it, thematic applies
 the theme colors but falls back to the default graphics-device font.
 
 ## Notes
 
-- `_brand.yml` is app content, not template scaffolding — `dev/use_template.R`
+- `_brand.yml` is app content, not template scaffolding -- `dev/use_template.R`
   keeps it and only updates `meta.name` to your project name.
 - Keep `_brand.yml` in version control so the look of the app is reproducible.

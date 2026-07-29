@@ -1,4 +1,4 @@
-# Cell lines tab — filterable explorer of the cell-line metadata table.
+# Cell lines tab -- filterable explorer of the cell-line metadata table.
 
 register_page(
   id = "cell_lines",

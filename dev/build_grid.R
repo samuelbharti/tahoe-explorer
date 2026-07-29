@@ -86,7 +86,7 @@ summ <- DBI::dbGetQuery(
   )
 )
 
-pct <- function(a, b) if (b > 0) sprintf("%.1f%%", 100 * a / b) else "—"
+pct <- function(a, b) if (b > 0) sprintf("%.1f%%", 100 * a / b) else "-"
 cat(sprintf(
   paste0(
     "  done (%s)\n",

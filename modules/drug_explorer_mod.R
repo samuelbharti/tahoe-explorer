@@ -203,7 +203,7 @@ drug_explorer_ui <- function(id) {
         ),
         div(
           class = "text-muted small",
-          "Click a table row or pick here — the two stay in sync."
+          "Click a table row or pick here -- the two stay in sync."
         )
       )
     ),
@@ -222,7 +222,7 @@ drug_explorer_ui <- function(id) {
         ),
         div(
           class = "text-muted small px-1 pb-1",
-          "Click a row to select a drug — its details, target mutations, and",
+          "Click a row to select a drug -- its details, target mutations, and",
           " summary charts appear in the next column, with its mechanism /",
           " approval / targets highlighted. Click a chart bar to filter the table."
         ),
@@ -597,7 +597,7 @@ drug_explorer_server <- function(id) {
         " targets ",
         tags$b(paste(genes, collapse = ", ")),
         sprintf(
-          " — %d of %d assayed cell lines carry a somatic variant in %s.",
+          " -- %d of %d assayed cell lines carry a somatic variant in %s.",
           n_lines,
           n_assayed,
           if (length(genes) == 1) "it" else "one of them"

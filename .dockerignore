@@ -8,7 +8,7 @@
 renv/library
 renv/staging
 
-# Real Tahoe metadata — never bake into the image (only synthetic fixtures)
+# Real Tahoe metadata -- never bake into the image (only synthetic fixtures)
 data/*
 !data/fixtures/
 !data/fixtures/**
@@ -18,7 +18,7 @@ docs
 tests
 *.Rproj
 
-# Real Tahoe metadata — never bake into the image (only the synthetic fixtures
+# Real Tahoe metadata -- never bake into the image (only the synthetic fixtures
 # ship, so the container runs the offline demo). Mirrors .gitignore.
 data/*
 !data/fixtures/

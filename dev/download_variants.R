@@ -5,7 +5,7 @@
 #   (full somatic profiles; one row per variant per model, keyed by DepMap id).
 #   Portal: https://depmap.org/portal   DOI: 10.25452/figshare.plus.27993248.v1
 #   License: CC BY 4.0. Cite: DepMap, Broad (2024). DepMap 24Q4 Public. Figshare+.
-# Fallback: Cellosaurus (https://www.cellosaurus.org), CC BY 4.0 — curated driver
+# Fallback: Cellosaurus (https://www.cellosaurus.org), CC BY 4.0 -- curated driver
 #   variants (by CVCL_ accession) for the lines DepMap does not cover, so every
 #   assayed line that has known variants is represented.
 #
@@ -165,7 +165,7 @@ covered <- DBI::dbGetQuery(
 cat(sprintf("  DepMap covers %d cell lines.\n", length(covered)))
 
 # Cellosaurus fallback: curated driver variants for the lines DepMap missed.
-# Best-effort — skipped (with a note) if jsonlite is unavailable or a fetch fails,
+# Best-effort -- skipped (with a note) if jsonlite is unavailable or a fetch fails,
 # so the DepMap table is still produced.
 cello_df <- NULL
 lines <- DBI::dbGetQuery(

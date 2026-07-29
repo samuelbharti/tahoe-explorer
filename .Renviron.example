@@ -10,7 +10,7 @@
 # TAHOE_OBS_REMOTE=0
 
 # HuggingFace access token for better remote access (higher rate limits, and
-# gated datasets). Optional — the Tahoe-100M dataset is public. Create a token
+# gated datasets). Optional -- the Tahoe-100M dataset is public. Create a token
 # with "read" scope at https://huggingface.co/settings/tokens and paste it
 # below (no quotes). This file is git-ignored, so the token is never committed.
 # HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -18,7 +18,7 @@
 # --- AI assistant (sidebar): Google Vertex AI + Gemini ------------------------
 # The assistant sidebar shows a setup panel until a project is configured AND the
 # ellmer + shinychat packages are installed. Auth is via gcloud Application
-# Default Credentials — run once, NO API key or token goes in this file:
+# Default Credentials -- run once, NO API key or token goes in this file:
 #   gcloud auth application-default login
 #
 # GCP project with Vertex AI enabled. REQUIRED to enable the shared assistant.

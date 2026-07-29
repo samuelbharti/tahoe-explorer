@@ -1,4 +1,4 @@
-# Subset builder tab — cross-table selection, coverage preview, filtered
+# Subset builder tab -- cross-table selection, coverage preview, filtered
 # download, and a copy-paste R/Python analysis recipe.
 
 register_page(
