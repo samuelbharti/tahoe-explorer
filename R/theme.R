@@ -210,36 +210,58 @@ tahoe_plotly <- function(p, tooltip = c("x", "y"), source = NULL) {
 }
 
 # Shared, axis-agnostic styling: Inter type, a light tooltip with comma-grouped
-# values, no legend, a soft grid, and a gentle load animation.
-.tahoe_echart_common <- function(e, legend = FALSE) {
-  e |>
-    echarts4r::e_grid(
-      left = "2%",
-      right = "6%",
-      top = "12%",
-      bottom = "6%",
-      containLabel = TRUE
-    ) |>
-    echarts4r::e_tooltip(
-      trigger = "item",
-      backgroundColor = "rgba(255,255,255,0.96)",
-      borderColor = tahoe_colors$grid,
-      borderWidth = 1,
-      textStyle = list(
-        color = tahoe_colors$fg,
-        fontFamily = "Inter, system-ui, sans-serif"
-      ),
-      valueFormatter = htmlwidgets::JS(
-        "function(v){ return (v==null) ? '' : Number(v).toLocaleString(); }"
-      )
-    ) |>
+# values, a soft grid, and a gentle load animation. `legend_pos` places the
+# legend at the bottom (default) or top; a horizontal-bar chart with a bottom
+# value-axis title puts its legend at the top so the two never overlap.
+# `grid_top`/`grid_bottom` widen the plot margins when a legend or an axis title
+# needs the room.
+.tahoe_echart_common <- function(
+  e,
+  legend = FALSE,
+  legend_pos = c("bottom", "top"),
+  grid_top = "12%",
+  grid_bottom = "6%"
+) {
+  legend_pos <- match.arg(legend_pos)
+  e <- echarts4r::e_grid(
+    e,
+    left = "2%",
+    right = "6%",
+    top = grid_top,
+    bottom = grid_bottom,
+    containLabel = TRUE
+  )
+  e <- echarts4r::e_tooltip(
+    e,
+    trigger = "item",
+    backgroundColor = "rgba(255,255,255,0.96)",
+    borderColor = tahoe_colors$grid,
+    borderWidth = 1,
+    textStyle = list(
+      color = tahoe_colors$fg,
+      fontFamily = "Inter, system-ui, sans-serif"
+    ),
+    valueFormatter = htmlwidgets::JS(
+      "function(v){ return (v==null) ? '' : Number(v).toLocaleString(); }"
+    )
+  )
+  e <- if (identical(legend_pos, "top")) {
     echarts4r::e_legend(
+      e,
+      show = legend,
+      top = 0,
+      textStyle = list(color = "#5F6B7A")
+    )
+  } else {
+    echarts4r::e_legend(
+      e,
       show = legend,
       bottom = 0,
       textStyle = list(color = "#5F6B7A")
-    ) |>
-    echarts4r::e_text_style(fontFamily = "Inter, system-ui, sans-serif") |>
-    echarts4r::e_animation(duration = 650, easing = "cubicOut")
+    )
+  }
+  e <- echarts4r::e_text_style(e, fontFamily = "Inter, system-ui, sans-serif")
+  echarts4r::e_animation(e, duration = 650, easing = "cubicOut")
 }
 
 # Horizontal-bar core: builds one bar series over a (label, value) frame in the
@@ -348,7 +370,8 @@ tahoe_echart_vbar <- function(
     ) |>
     (\(e) .tahoe_echart_axis(e, "x", cat_axis))() |>
     (\(e) .tahoe_echart_axis(e, "y", .tahoe_echart_value_axis(value_name)))() |>
-    .tahoe_echart_common()
+    # Reserve extra bottom room for the x-axis title so it is never clipped.
+    .tahoe_echart_common(grid_bottom = if (is.null(x_title)) "6%" else "20%")
 }
 
 #' Histogram of a numeric vector, echarts4r-styled to match tahoe_echart_vbar:
