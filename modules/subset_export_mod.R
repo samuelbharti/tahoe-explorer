@@ -68,8 +68,8 @@ subset_export_ui <- function(id, show_recipe = FALSE) {
               ns("recipe_format"),
               "Notebook format",
               choices = c(
-                "R Markdown (.Rmd)" = "rmd",
                 "Quarto (.qmd)" = "qmd",
+                "R Markdown (.Rmd)" = "rmd",
                 "Jupyter (.ipynb)" = "ipynb"
               )
             )
@@ -175,12 +175,12 @@ subset_export_server <- function(
       recipe_ext <- c(rmd = ".Rmd", qmd = ".qmd", ipynb = ".ipynb")
       output$recipe_dl <- downloadHandler(
         filename = function() {
-          fmt <- input$recipe_format %||% "rmd"
+          fmt <- input$recipe_format %||% "qmd"
           paste0(stem(), "_recipe", recipe_ext[[fmt]])
         },
         content = function(file) {
           parts <- .export_resolve(recipe_parts, default = NULL)
-          fmt <- input$recipe_format %||% "rmd"
+          fmt <- input$recipe_format %||% "qmd"
           lang <- input$recipe_lang %||% "r"
           text <- if (is.null(parts)) {
             "No selection to export."
