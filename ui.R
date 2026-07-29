@@ -69,6 +69,17 @@ do.call(
           border-radius: 2rem;
           font-weight: 600;
         }
+        /* Tahoe-tinted scrollbars (teal thumb on a faint track). */
+        * { scrollbar-width: thin; scrollbar-color: rgba(11,114,133,0.5) rgba(11,114,133,0.08); }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: rgba(11,114,133,0.06); border-radius: 8px; }
+        ::-webkit-scrollbar-thumb {
+          background: rgba(11,114,133,0.45);
+          border-radius: 8px;
+          border: 2px solid transparent;
+          background-clip: content-box;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(11,114,133,0.7); background-clip: content-box; }
         /* Consistent horizontal gutter on every page's content (not the navbar
            menu). Applied to the tab-pane so fillable pages (Chat) match too. */
         .bslib-page-navbar > .container-fluid > .tab-content > .tab-pane {
@@ -77,10 +88,32 @@ do.call(
         }
         "
       ),
-      # Load the guided-tour (cicerone) JS/CSS dependency once for the whole app.
-      header = cicerone::use_cicerone(),
-      # Only pages that opt in (via register_page(fillable = TRUE)) become
-      # fillable -- currently the Chat page, so its chat fills the viewport.
+      # Load the guided-tour (cicerone) JS/CSS dependency once for the whole app,
+      # plus a handler that redraws every plot to its container on request (the
+      # plot-card refresh buttons; see R/theme.R tahoe_plot_refresh_*).
+      header = tagList(
+        cicerone::use_cicerone(),
+        tags$script(HTML(
+          "Shiny.addCustomMessageHandler('tahoe_resize_plots', function(msg){",
+          "  window.dispatchEvent(new Event('resize'));",
+          "});"
+        ))
+      ),
+      # App-wide "Tahoe assistant": the chat lives in a left-hand sidebar
+      # available on every page. It starts CLOSED so it never blocks the
+      # workflow; users open it from the "Assistant" button in the navbar (which
+      # toggles it via server.R) or the sidebar's own toggle. The model / key
+      # controls sit in a collapsed section inside the sidebar (chat_agent_ui).
+      sidebar = bslib::sidebar(
+        id = "assistant_dock",
+        title = tagList(shiny::icon("robot"), " Tahoe assistant"),
+        position = "left",
+        open = "closed",
+        width = 600,
+        chat_agent_ui("chat_dock")
+      ),
+      # No page opts into a fillable panel (a fillable panel would force a fixed
+      # viewport height and pin the footer mid-page); returns FALSE.
       fillable = app_fillable_pages(),
       # App-wide attribution footer (4vw gutter matches the page content).
       footer = tags$footer(
@@ -114,12 +147,21 @@ do.call(
       )
     ),
     app_nav_panels(),
-    # Right-aligned navbar actions (nav_spacer pushes everything after it to the
-    # right): a guided-demo launcher and a data-provenance chip. The Demo button
-    # switches to the relevant tab and starts the cicerone tour (server.R /
-    # R/tour.R); the chip shows whether the numbers are real data or fixtures.
+    # Right-aligned navbar actions (nav_spacer pushes everything after it right):
+    # a Tahoe-assistant toggle (opens/closes the chat sidebar via server.R; its
+    # model/key settings live in a collapsed section inside it), a guided-demo
+    # launcher that starts the active tab's cicerone tour (server.R / R/tour.R),
+    # and a data-provenance chip showing whether the numbers are real or fixtures.
     list(
       bslib::nav_spacer(),
+      bslib::nav_item(
+        actionButton(
+          "toggle_assistant",
+          "Assistant",
+          icon = icon("comments"),
+          class = "btn-sm btn-outline-primary my-1"
+        )
+      ),
       bslib::nav_item(
         actionButton(
           "demo_tour",

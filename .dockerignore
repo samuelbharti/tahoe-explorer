@@ -18,6 +18,12 @@ docs
 tests
 *.Rproj
 
+# Real Tahoe metadata — never bake into the image (only the synthetic fixtures
+# ship, so the container runs the offline demo). Mirrors .gitignore.
+data/*
+!data/fixtures/
+!data/fixtures/**
+
 # Dev tooling / configs not needed in the image
 template.yml
 .pre-commit-config.yaml

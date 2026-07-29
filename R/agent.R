@@ -292,6 +292,16 @@ tahoe_agent_env_provider <- function() {
       ),
       cc$data_source %||% "unknown",
       cc$obs_source %||% "unknown"
+    ),
+    paste0(
+      "\n## Driving the app\n\n",
+      "You can see and control the app's interactive controls. When the user ",
+      "asks to filter, select, or build something, actually DO it with the ",
+      "page tools -- don't just describe it. Use get_active_page to find the ",
+      "page the user is on; act on THAT page by default, and only target a ",
+      "different page when the user names one (set_page_controls switches to it ",
+      "for them). Check get_page_controls for the valid option values first, ",
+      "then call set_page_controls. Report briefly what you changed.\n"
     )
   )
 }

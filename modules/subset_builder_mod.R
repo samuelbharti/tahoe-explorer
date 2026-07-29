@@ -65,6 +65,7 @@ subset_builder_ui <- function(id) {
 
   bslib::layout_sidebar(
     sidebar = bslib::sidebar(
+      id = ns("filters_sidebar"),
       title = "Build a subset",
       width = 330,
       # tour_* ids anchor the guided demo (see R/tour.R).
@@ -136,8 +137,9 @@ subset_builder_ui <- function(id) {
       id = ns("tour_preview"),
       col_widths = c(7, 5),
       bslib::card(
+        full_screen = TRUE,
         bslib::card_header("Cells in selection, by cell line"),
-        plotly::plotlyOutput(ns("live_plot"), height = 360)
+        echarts4r::echarts4rOutput(ns("live_plot"), height = "420px")
       ),
       bslib::card(
         bslib::card_header(
@@ -364,7 +366,7 @@ subset_builder_server <- function(id) {
       )
     })
 
-    output$live_plot <- plotly::renderPlotly({
+    output$live_plot <- echarts4r::renderEcharts4r({
       g <- grid_filtered()
       validate(need(
         nrow(g) > 0 && sum(g$n_cells, na.rm = TRUE) > 0,
@@ -373,24 +375,12 @@ subset_builder_server <- function(id) {
       by_line <- stats::aggregate(n_cells ~ cell_name, data = g, FUN = sum)
       by_line <- by_line[order(-by_line$n_cells), , drop = FALSE]
       by_line <- utils::head(by_line, 25)
-      by_line$cell_name <- factor(
-        by_line$cell_name,
-        levels = rev(by_line$cell_name)
+      plot_df <- data.frame(
+        label = by_line$cell_name,
+        value = by_line$n_cells,
+        stringsAsFactors = FALSE
       )
-      p <- ggplot2::ggplot(
-        by_line,
-        ggplot2::aes(x = .data$cell_name, y = .data$n_cells)
-      ) +
-        ggplot2::geom_col(fill = tahoe_colors$primary) +
-        ggplot2::coord_flip() +
-        ggplot2::scale_y_continuous(
-          labels = scales::label_number(
-            scale_cut = scales::cut_short_scale()
-          )
-        ) +
-        ggplot2::labs(x = NULL, y = "Cells") +
-        tahoe_theme()
-      tahoe_plotly(p)
+      tahoe_echart_hbar(plot_df, tahoe_colors$primary, value_name = "Cells")
     })
 
     tahoe_table_server("preview", data = matched_samples, page_size = 8)
@@ -444,9 +434,9 @@ subset_builder_server <- function(id) {
     )
 
     # --- Chat-assistant bridge -------------------------------------------------
-    # Expose the live selection (read) and a validated setter (drive) so the Chat
-    # assistant's get_subset_selection / set_subset_selection tools can inspect
-    # and change what the user has picked here. Registered into session$userData
+    # Expose the live selection (read) and a validated setter (drive) so the
+    # assistant's get_page_controls / set_page_controls tools can inspect and
+    # change what the user has picked here. Registered into session$userData
     # (shared across module sessions); see R/agent_bridge.R. These closures are
     # called from the chat module's async tool call, so every reactive read is
     # isolated and every input write targets THIS module's session.
@@ -484,6 +474,11 @@ subset_builder_server <- function(id) {
     # any vector (including empty) replaces it. Values outside the dataset are
     # dropped and reported in `ignored`, so the LLM can correct itself.
     bridge_set <- function(request) {
+      # Accept the canonical cross-page field name (driver_genes) as well as the
+      # subset-native `drivers`.
+      if (is.null(request$drivers)) {
+        request$drivers <- request$driver_genes
+      }
       g <- isolate(tryCatch(grid(), error = function(e) NULL))
       dl <- isolate(tryCatch(driver_lines(), error = function(e) {
         tahoe_cell_line()
@@ -611,9 +606,10 @@ subset_builder_server <- function(id) {
       out
     }
 
-    tahoe_register_subset_bridge(
+    tahoe_register_page_bridge(
       session,
-      list(get = bridge_get, set = bridge_set)
+      "subset",
+      list(title = "Subset builder", get = bridge_get, set = bridge_set)
     )
 
     list(matched_samples = matched_samples, grid_filtered = grid_filtered)

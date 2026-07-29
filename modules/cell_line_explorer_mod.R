@@ -18,23 +18,20 @@
   sort(unique(as.character(vals)))
 }
 
-# Horizontal bar chart of the value counts of one column of `df`. Precomputes
-# counts into a clean data frame before plotting (mirrors overview_mod.R).
+# Horizontal bar chart of the value counts of one column of `df`, as a shared
+# echarts4r bar (largest on top). Precomputes counts into a clean (label, value)
+# frame before plotting (mirrors overview_mod.R).
 .cell_line_bar <- function(df, column, fill, top_n = 15) {
   validate(need(column %in% names(df), "Column not available"))
   counts <- sort(table(df[[column]]), decreasing = TRUE)
   counts <- utils::head(counts, top_n)
   validate(need(length(counts) > 0, "No data to plot"))
   plot_df <- data.frame(
-    label = factor(names(counts), levels = rev(names(counts))),
-    n = as.integer(counts)
+    label = names(counts),
+    value = as.integer(counts),
+    stringsAsFactors = FALSE
   )
-  ggplot2::ggplot(plot_df, ggplot2::aes(x = label, y = n)) +
-    ggplot2::geom_col(fill = fill) +
-    ggplot2::coord_flip() +
-    ggplot2::scale_y_continuous(expand = ggplot2::expansion(c(0, 0.12))) +
-    ggplot2::labs(x = NULL, y = "Count") +
-    tahoe_theme()
+  tahoe_echart_hbar(plot_df, fill, value_name = "Count")
 }
 
 cell_line_explorer_ui <- function(id) {
@@ -42,6 +39,7 @@ cell_line_explorer_ui <- function(id) {
   df <- tahoe_cell_line()
   bslib::layout_sidebar(
     sidebar = bslib::sidebar(
+      id = ns("filters_sidebar"),
       title = "Filters",
       width = 250,
       gap = "0.4rem",
@@ -96,16 +94,19 @@ cell_line_explorer_ui <- function(id) {
       div(
         id = ns("tour_charts"),
         bslib::card(
+          full_screen = TRUE,
           bslib::card_header("Cell lines by organ"),
-          plotly::plotlyOutput(ns("organ_plot"), height = 260)
+          echarts4r::echarts4rOutput(ns("organ_plot"), height = "320px")
         ),
         bslib::card(
+          full_screen = TRUE,
           bslib::card_header("Top driver genes"),
-          plotly::plotlyOutput(ns("gene_plot"), height = 260)
+          echarts4r::echarts4rOutput(ns("gene_plot"), height = "320px")
         ),
         bslib::card(
+          full_screen = TRUE,
           bslib::card_header("Variant-type breakdown"),
-          plotly::plotlyOutput(ns("var_type_plot"), height = 260)
+          echarts4r::echarts4rOutput(ns("var_type_plot"), height = "320px")
         )
       )
     ),
@@ -136,8 +137,9 @@ cell_line_explorer_ui <- function(id) {
         tahoe_table_ui(ns("variants"))
       ),
       bslib::card(
+        full_screen = TRUE,
         bslib::card_header("Most frequently mutated genes"),
-        plotly::plotlyOutput(ns("mutated_genes_plot"), height = 300)
+        echarts4r::echarts4rOutput(ns("mutated_genes_plot"), height = "360px")
       )
     )
   )
@@ -268,37 +270,96 @@ cell_line_explorer_server <- function(id) {
       )
     )
 
-    output$mutated_genes_plot <- plotly::renderPlotly({
+    output$mutated_genes_plot <- echarts4r::renderEcharts4r({
       v <- variants()
       validate(need(
         nrow(v) > 0 && "gene" %in% names(v),
         "No variant data to plot."
       ))
-      tahoe_plotly(.cell_line_bar(v, "gene", tahoe_colors$orange))
+      .cell_line_bar(v, "gene", tahoe_colors$orange)
     })
 
-    output$organ_plot <- plotly::renderPlotly({
+    output$organ_plot <- echarts4r::renderEcharts4r({
       df <- filtered_lines()
       validate(need(nrow(df) > 0, "No cell lines match the current filters."))
-      tahoe_plotly(.cell_line_bar(df, "Organ", tahoe_colors$green))
+      .cell_line_bar(df, "Organ", tahoe_colors$green)
     })
 
-    output$gene_plot <- plotly::renderPlotly({
+    output$gene_plot <- echarts4r::renderEcharts4r({
       df <- filtered()
       validate(need(nrow(df) > 0, "No cell lines match the current filters."))
-      tahoe_plotly(.cell_line_bar(df, "Driver_Gene_Symbol", tahoe_colors$blue))
+      .cell_line_bar(df, "Driver_Gene_Symbol", tahoe_colors$blue)
     })
 
-    output$var_type_plot <- plotly::renderPlotly({
+    output$var_type_plot <- echarts4r::renderEcharts4r({
       df <- filtered()
       validate(need(nrow(df) > 0, "No cell lines match the current filters."))
-      tahoe_plotly(.cell_line_bar(df, "Driver_VarType", tahoe_colors$orange))
+      .cell_line_bar(df, "Driver_VarType", tahoe_colors$orange)
     })
 
     subset_export_server(
       "export",
       data_reactive = filtered_lines,
       file_stem = "cell_lines_subset"
+    )
+
+    # --- Chat-assistant bridge: read and drive these filters.
+    cl_bridge_get <- function() {
+      df <- isolate(all_cell_lines())
+      list(
+        filters = list(
+          organs = list(
+            current = isolate(input$organ),
+            options = .cell_line_choices(df, "Organ")
+          ),
+          driver_genes = list(
+            current = isolate(input$gene),
+            options = .cell_line_choices(df, "Driver_Gene_Symbol")
+          ),
+          variant_types = list(
+            current = isolate(input$var_type),
+            options = .cell_line_choices(df, "Driver_VarType")
+          ),
+          name = list(current = isolate(input$cell_name), kind = "text")
+        ),
+        matched_cell_lines = nrow(isolate(filtered_lines()))
+      )
+    }
+    cl_bridge_set <- function(request) {
+      df <- isolate(all_cell_lines())
+      ignored <- list()
+      apply_multi <- function(field, input_id, col) {
+        v <- tahoe_bridge_validate(
+          request[[field]],
+          .cell_line_choices(df, col)
+        )
+        if (length(v$bad) > 0) {
+          ignored[[field]] <<- v$bad
+        }
+        if (!is.null(v$good)) {
+          updateSelectizeInput(session, input_id, selected = v$good)
+        }
+      }
+      apply_multi("organs", "organ", "Organ")
+      apply_multi("driver_genes", "gene", "Driver_Gene_Symbol")
+      apply_multi("variant_types", "var_type", "Driver_VarType")
+      if (!is.null(request$name)) {
+        updateTextInput(
+          session,
+          "cell_name",
+          value = as.character(request$name)
+        )
+      }
+      out <- list(applied = TRUE)
+      if (length(ignored) > 0) {
+        out$ignored <- ignored
+      }
+      out
+    }
+    tahoe_register_page_bridge(
+      session,
+      "cell_lines",
+      list(title = "Cell lines", get = cl_bridge_get, set = cl_bridge_set)
     )
 
     # Expose the collapsed one-row-per-cell-line reactive for callers; the

@@ -3,7 +3,7 @@
 register_page(
   id = "qc",
   title = "QC",
-  order = 37,
+  order = 20,
   ui = div(
     class = "p-2",
     h3("Design & QC guardrails"),

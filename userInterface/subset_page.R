@@ -4,7 +4,7 @@
 register_page(
   id = "subset",
   title = "Subset builder",
-  order = 40,
+  order = 10,
   ui = div(
     class = "p-2",
     h3("Subset builder"),

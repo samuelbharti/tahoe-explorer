@@ -37,7 +37,8 @@ overview_ui <- function(id) {
       col_widths = c(5, 7),
       bslib::card(
         id = ns("tour_organs"),
-        height = "44vh",
+        full_screen = TRUE,
+        height = "52vh",
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
           span("Cell lines by organ"),
@@ -51,7 +52,7 @@ overview_ui <- function(id) {
             title = "Cell lines by organ"
           )
         ),
-        plotly::plotlyOutput(ns("organ_plot"), height = "37vh"),
+        echarts4r::echarts4rOutput(ns("organ_plot"), height = "45vh"),
         bslib::card_footer(
           class = "text-muted small",
           "Click a bar to filter · click it again to clear."
@@ -59,7 +60,7 @@ overview_ui <- function(id) {
       ),
       bslib::card(
         id = ns("tour_table"),
-        height = "44vh",
+        height = "52vh",
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
           div(
@@ -91,7 +92,8 @@ overview_ui <- function(id) {
       id = ns("tour_drivers"),
       col_widths = c(6, 6),
       bslib::card(
-        height = 360,
+        full_screen = TRUE,
+        height = 420,
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
           span("Driver genes"),
@@ -104,10 +106,11 @@ overview_ui <- function(id) {
             title = "Driver genes"
           )
         ),
-        plotly::plotlyOutput(ns("driver_gene_plot"), height = 260)
+        echarts4r::echarts4rOutput(ns("driver_gene_plot"), height = "320px")
       ),
       bslib::card(
-        height = 360,
+        full_screen = TRUE,
+        height = 420,
         bslib::card_header(
           class = "d-flex justify-content-between align-items-center",
           span("Variant classes"),
@@ -119,7 +122,7 @@ overview_ui <- function(id) {
             title = "Variant classes"
           )
         ),
-        plotly::plotlyOutput(ns("variant_plot"), height = 260)
+        echarts4r::echarts4rOutput(ns("variant_plot"), height = "320px")
       )
     )
   )
@@ -132,46 +135,34 @@ overview_ui <- function(id) {
   stats::setNames(tahoe_pal(length(ord)), ord)
 }
 
-# Color-coded organ bar chart. `key = label` carries the organ name for click
-# events; `selected` dims every other organ so the picked one stands out.
-.overview_organ_bar <- function(df, colors, selected = NULL, top_n = 15) {
+# Ordered (label, value) organ counts, largest first, top_n. Shared by the bar
+# and its click handler, which maps a clicked row back to this frame.
+.overview_organ_counts <- function(df, top_n = 15) {
   validate(need("Organ" %in% names(df), "Organ column not available"))
   counts <- sort(table(df[["Organ"]]), decreasing = TRUE)
   counts <- utils::head(counts, top_n)
-  plot_df <- data.frame(
-    label = factor(names(counts), levels = rev(names(counts))),
-    n = as.integer(counts)
+  data.frame(
+    label = names(counts),
+    value = as.integer(counts),
+    stringsAsFactors = FALSE
   )
-  plot_df$sel <- if (is.null(selected)) {
-    TRUE
-  } else {
-    as.character(plot_df$label) == selected
-  }
-  plot_df$text <- paste0(plot_df$label, ": ", plot_df$n, " cell lines")
-  ggplot2::ggplot(
-    plot_df,
-    ggplot2::aes(
-      x = label,
-      y = n,
-      fill = label,
-      alpha = sel,
-      key = label,
-      text = text
-    )
-  ) +
-    ggplot2::geom_col(width = 0.72) +
-    ggplot2::coord_flip() +
-    ggplot2::scale_fill_manual(values = colors, guide = "none") +
-    ggplot2::scale_alpha_manual(
-      values = c(`TRUE` = 1, `FALSE` = 0.22),
-      guide = "none"
-    ) +
-    ggplot2::scale_y_continuous(expand = ggplot2::expansion(c(0, 0.12))) +
-    ggplot2::labs(x = NULL, y = "Cell lines") +
-    tahoe_theme()
 }
 
-# Driver genes of one cell line, one bar per gene, colored by gene role.
+# Color-coded organ bar chart (one colour per organ). `selected` dims every
+# other organ so the picked one stands out; clicking a bar selects it (the
+# server maps the chart's <id>_clicked_row back to `counts_df`).
+.overview_organ_bar <- function(counts_df, colors, selected = NULL) {
+  tahoe_echart_cat_hbar(
+    counts_df,
+    colors,
+    value_name = "Cell lines",
+    selected = selected
+  )
+}
+
+# Driver genes of one cell line, one bar per gene coloured by gene role, with a
+# role legend. Built as one stacked series per role (each gene sits under its
+# role), so echarts shows the legend; bar length is the gene's driver-row count.
 .overview_driver_gene_bar <- function(rows) {
   rows <- rows[!is.na(rows$Driver_Gene_Symbol), , drop = FALSE]
   validate(need(nrow(rows) > 0, "No driver genes annotated for this line."))
@@ -180,29 +171,36 @@ overview_ui <- function(id) {
     "Unknown",
     rows$Driver_GeneType_DM
   )
-  genes <- unique(rows$Driver_Gene_Symbol)
-  rows$gene <- factor(rows$Driver_Gene_Symbol, levels = rev(genes))
-  rows$text <- paste0(
-    rows$Driver_Gene_Symbol,
-    " · ",
-    rows$Driver_VarType,
-    " · ",
-    rows$role
+  agg <- as.data.frame(
+    table(gene = rows$Driver_Gene_Symbol, role = rows$role),
+    stringsAsFactors = FALSE
   )
-  ggplot2::ggplot(
-    rows,
-    ggplot2::aes(x = gene, y = 1, fill = role, text = text)
-  ) +
-    ggplot2::geom_col(width = 0.7) +
-    ggplot2::coord_flip() +
-    ggplot2::scale_fill_manual(values = .gene_type_colors, name = NULL) +
-    ggplot2::labs(x = NULL, y = NULL) +
-    tahoe_theme() +
-    ggplot2::theme(
-      axis.text.x = ggplot2::element_blank(),
-      panel.grid = ggplot2::element_blank(),
-      legend.position = "bottom"
+  roles <- intersect(names(.gene_type_colors), unique(agg$role))
+  genes <- unique(agg$gene)
+  wide <- data.frame(gene = genes, stringsAsFactors = FALSE)
+  for (r in roles) {
+    freq <- agg$Freq[match(paste(wide$gene, r), paste(agg$gene, agg$role))]
+    freq[is.na(freq) | freq == 0] <- NA
+    wide[[r]] <- freq
+  }
+  e <- echarts4r::e_charts(wide, gene, reorder = FALSE)
+  for (r in roles) {
+    e <- echarts4r::e_bar_(
+      e,
+      r,
+      stack = "role",
+      name = r,
+      barWidth = "62%",
+      itemStyle = list(
+        color = unname(.gene_type_colors[[r]]),
+        borderRadius = c(0, 6, 6, 0)
+      )
     )
+  }
+  e <- e |> echarts4r::e_flip_coords()
+  e <- .tahoe_echart_axis(e, "x", .tahoe_echart_value_axis())
+  e <- .tahoe_echart_axis(e, "y", .tahoe_echart_cat_axis(inverse = TRUE))
+  .tahoe_echart_common(e, legend = TRUE)
 }
 
 # Variant-class breakdown of one cell line's drivers, using a stable class color.
@@ -211,28 +209,15 @@ overview_ui <- function(id) {
   validate(need(nrow(rows) > 0, "No variant classes annotated for this line."))
   counts <- sort(table(rows$Driver_VarType), decreasing = TRUE)
   plot_df <- data.frame(
-    label = factor(names(counts), levels = rev(names(counts))),
-    n = as.integer(counts)
+    label = names(counts),
+    value = as.integer(counts),
+    stringsAsFactors = FALSE
   )
-  plot_df$text <- paste0(plot_df$label, ": ", plot_df$n)
-  ggplot2::ggplot(
-    plot_df,
-    ggplot2::aes(x = label, y = n, fill = label, text = text)
-  ) +
-    ggplot2::geom_col(width = 0.72) +
-    ggplot2::coord_flip() +
-    ggplot2::scale_fill_manual(values = colors, guide = "none") +
-    ggplot2::scale_y_continuous(
-      breaks = scales::breaks_pretty(),
-      expand = ggplot2::expansion(c(0, 0.12))
-    ) +
-    ggplot2::labs(x = NULL, y = "Drivers") +
-    tahoe_theme()
+  tahoe_echart_cat_hbar(plot_df, colors, value_name = "Drivers")
 }
 
 overview_server <- function(id) {
   moduleServer(id, function(input, output, session) {
-    organ_src <- session$ns("organ")
     # The annotation table is driver-level (~102 distinct cell lines), but only
     # the ~50 in the obs data were actually assayed. Restrict to those so the
     # chart and table reconcile with the "Cell lines" headline count. Falls
@@ -309,21 +294,22 @@ overview_server <- function(id) {
       )
     })
 
-    output$organ_plot <- plotly::renderPlotly({
-      tahoe_plotly(
-        .overview_organ_bar(lines(), organ_colors(), selected_organ()),
-        tooltip = "text",
-        source = organ_src
-      )
+    # Ordered organ counts, shared by the bar and its click handler.
+    organ_counts <- reactive(.overview_organ_counts(lines()))
+
+    output$organ_plot <- echarts4r::renderEcharts4r({
+      .overview_organ_bar(organ_counts(), organ_colors(), selected_organ())
     })
 
     # Clicking an organ bar filters the table; clicking the same one clears it.
-    observeEvent(plotly::event_data("plotly_click", source = organ_src), {
-      click <- plotly::event_data("plotly_click", source = organ_src)
-      organ <- click$key
-      if (is.null(organ) || !nzchar(organ)) {
+    # echarts4r reports the clicked bar's 1-based row in the plotted frame.
+    observeEvent(input$organ_plot_clicked_row, {
+      d <- isolate(organ_counts())
+      row <- input$organ_plot_clicked_row
+      if (is.null(row) || row < 1 || row > nrow(d)) {
         return()
       }
+      organ <- as.character(d$label[[row]])
       if (identical(organ, selected_organ())) {
         selected_organ(NULL)
       } else {
@@ -419,8 +405,7 @@ overview_server <- function(id) {
       columns = cell_line_cols,
       selection = "single",
       on_click = "select",
-      pagination = FALSE,
-      height = "30vh",
+      page_size = 8,
       empty_message = "No cell lines for this organ."
     )
 
@@ -443,25 +428,22 @@ overview_server <- function(id) {
       cl[!is.na(cl$cell_name) & cl$cell_name == cn, , drop = FALSE]
     })
 
-    output$driver_gene_plot <- plotly::renderPlotly({
+    output$driver_gene_plot <- echarts4r::renderEcharts4r({
       rows <- driver_rows()
       validate(need(
         !is.null(rows),
         "Click a cell line in the table to see its driver genes."
       ))
-      tahoe_plotly(.overview_driver_gene_bar(rows), tooltip = "text")
+      .overview_driver_gene_bar(rows)
     })
 
-    output$variant_plot <- plotly::renderPlotly({
+    output$variant_plot <- echarts4r::renderEcharts4r({
       rows <- driver_rows()
       validate(need(
         !is.null(rows),
         "Click a cell line to see its variant classes."
       ))
-      tahoe_plotly(
-        .overview_variant_bar(rows, variant_colors()),
-        tooltip = "text"
-      )
+      .overview_variant_bar(rows, variant_colors())
     })
   })
 }

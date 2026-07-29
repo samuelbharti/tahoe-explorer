@@ -45,25 +45,9 @@
   )
 }
 
-chat_agent_ui <- function(id) {
-  ns <- NS(id)
-  header <- div(
-    id = ns("tour_intro"),
-    class = "p-2",
-    h3("Ask the Tahoe assistant"),
-    p(
-      class = "text-muted",
-      "An AI assistant with tools over this app's data layer. It can explain the",
-      "Tahoe-100M dataset and this app, and help you plan a subset."
-    )
-  )
-
-  if (!tahoe_agent_enabled()) {
-    return(tagList(header, .chat_disabled_panel()))
-  }
-
-  # Model-source choices: the shared default (when configured) plus every offered
-  # BYOK provider. Names are user-facing labels; values are stable ids.
+# Model-source choices: the shared default (when configured) plus every offered
+# BYOK provider. Names are user-facing labels; values are stable ids.
+.chat_source_choices <- function() {
   choices <- character(0)
   if (tahoe_agent_default_available()) {
     choices <- c(choices, "Shared assistant (Gemini on Vertex)" = "shared")
@@ -71,129 +55,238 @@ chat_agent_ui <- function(id) {
   for (p in tahoe_agent_byok_providers()) {
     choices[.tahoe_agent_provider_meta(p)$label] <- p
   }
-  if (length(choices) == 0) {
-    return(tagList(header, .chat_disabled_panel()))
-  }
+  choices
+}
 
-  # Prefer a source that connects without pasting: the shared Vertex default if
-  # configured, otherwise a BYOK provider whose key is already in the
-  # environment, otherwise the first offered provider.
-  default_source <- if (tahoe_agent_default_available()) {
+# Prefer a source that connects without pasting: the shared Vertex default if
+# configured, otherwise a BYOK provider whose key is already in the environment,
+# otherwise the first offered provider.
+.chat_default_source <- function(choices) {
+  if (tahoe_agent_default_available()) {
     "shared"
   } else {
     tahoe_agent_env_provider() %||% unname(choices)[1]
   }
+}
 
-  # Fill carrier so the sidebar+chat layout grows to fill the (fillable) Chat
-  # panel: the chat fills the viewport minus the header and only the message list
-  # scrolls, so the page itself never scrolls. See userInterface/chat_page.R
-  # (fillable = TRUE). The compact CSS trims bslib's generous sidebar padding.
-  # A div (not a tagList) so as_fill_carrier can set the fill role on a real tag.
-  bslib::as_fill_carrier(div(
-    class = "tahoe-chat-page",
-    tags$style(HTML(
-      paste0(
-        # bslib's fillable-panel layout resets this pane's padding to 0, so the
-        # global 4vw page gutter (ui.R) doesn't reach the Chat tab -- restore it
-        # here on the page wrapper so the chat lines up with the other tabs.
-        ".tahoe-chat-page",
-        "{padding-left:4vw !important;padding-right:4vw !important;}",
-        ".tahoe-chat-layout .sidebar-content",
-        "{padding-top:12px !important;gap:8px !important;}",
-        ".tahoe-chat-layout .form-group,",
-        ".tahoe-chat-layout .shiny-input-container{margin-bottom:0 !important;}",
-        ".tahoe-chat-layout .control-label{margin-bottom:2px !important;}"
-      )
-    )),
-    header,
-    bslib::as_fill_carrier(div(
-      class = "tahoe-chat-layout",
-      bslib::layout_sidebar(
-        sidebar = bslib::sidebar(
-          title = "Model source",
-          width = 420,
-          # tour_source anchors the guided demo (see R/tour.R).
-          div(
-            id = ns("tour_source"),
-            selectInput(
-              ns("source"),
-              label = NULL,
-              choices = choices,
-              selected = default_source
-            )
-          ),
-          # Key form: shown for any BYOK provider, hidden for the shared default.
-          conditionalPanel(
-            condition = "input.source && input.source != 'shared'",
-            ns = ns,
-            uiOutput(ns("key_help")),
-            passwordInput(
-              ns("api_key"),
-              "API key",
-              placeholder = "Paste your key (kept in this session only)"
-            ),
-            # Model picker: choose a suggested model or type any id the key
-            # supports (create = TRUE). Left empty -> the provider's own default.
-            # Choices are repopulated per provider in the server; the button
-            # below can replace them with the key's live, current model list.
-            selectizeInput(
-              ns("model"),
-              "Model",
-              choices = character(0),
-              selected = character(0),
-              multiple = FALSE,
-              options = list(
-                create = TRUE,
-                placeholder = "Provider default - pick or type a model"
-              )
-            ),
-            tags$p(
-              class = "text-muted small mb-1",
-              "Not listed? Type any model id your key supports and press Enter."
-            ),
-            # Pull the CURRENT, key-scoped model list from the provider so the
-            # picker never offers a stale or inaccessible model.
-            actionButton(
-              ns("refresh_models"),
-              "List models for this key",
-              class = "btn-outline-secondary btn-sm mb-1"
-            ),
-            uiOutput(ns("model_source")),
-            div(
-              class = "d-flex gap-2 mb-2",
-              actionButton(
-                ns("connect"),
-                "Connect",
-                class = "btn-primary btn-sm"
-              ),
-              actionButton(
-                ns("forget"),
-                "Forget key",
-                class = "btn-outline-secondary btn-sm"
-              )
-            )
-          ),
-          uiOutput(ns("cred_status")),
-          tags$p(
-            class = "text-muted small",
-            "Ask about Tahoe-100M, the app, drugs, cell lines, or building a",
-            "subset. Switching source starts a fresh conversation."
-          )
-        ),
-        shinychat::chat_ui(
-          ns("chat"),
-          # Explicit tall height (viewport minus navbar/header/footer chrome) so
-          # the chat fills most of the screen without making the whole page a
-          # fixed-height fillable container (which would break the app footer).
-          height = "calc(100vh - 250px)",
-          placeholder = "Ask about the dataset, drugs, cell lines, or a subset...",
-          greeting = paste(
-            "Hi! I can explain the **Tahoe-100M** dataset and this app, and help",
-            "you plan a subset for your analysis. What are you working on?"
-          )
+# The model-source config: provider select + BYOK key/model form + status. Lives
+# in the navbar settings popover (chat_agent_config_ui); its ids are namespaced
+# to the chat instance so the same chat_agent_server() reads them.
+.chat_config_controls <- function(ns, choices, default_source) {
+  tagList(
+    selectInput(
+      ns("source"),
+      label = NULL,
+      choices = choices,
+      selected = default_source
+    ),
+    # Key form: shown for any BYOK provider, hidden for the shared default.
+    conditionalPanel(
+      condition = "input.source && input.source != 'shared'",
+      ns = ns,
+      uiOutput(ns("key_help")),
+      passwordInput(
+        ns("api_key"),
+        "API key",
+        placeholder = "Paste your key (kept in this session only)"
+      ),
+      # Model picker: choose a suggested model or type any id the key supports
+      # (create = TRUE). Left empty -> the provider's own default. Choices are
+      # repopulated per provider in the server; the button below can replace
+      # them with the key's live, current model list.
+      selectizeInput(
+        ns("model"),
+        "Model",
+        choices = character(0),
+        selected = character(0),
+        multiple = FALSE,
+        options = list(
+          create = TRUE,
+          placeholder = "Provider default - pick or type a model"
+        )
+      ),
+      tags$p(
+        class = "text-muted small mb-1",
+        "Not listed? Type any model id your key supports and press Enter."
+      ),
+      # Pull the CURRENT, key-scoped model list from the provider so the picker
+      # never offers a stale or inaccessible model.
+      actionButton(
+        ns("refresh_models"),
+        "List models for this key",
+        class = "btn-outline-secondary btn-sm mb-1"
+      ),
+      uiOutput(ns("model_source")),
+      div(
+        class = "d-flex gap-2 mb-2",
+        actionButton(ns("connect"), "Connect", class = "btn-primary btn-sm"),
+        actionButton(
+          ns("forget"),
+          "Forget key",
+          class = "btn-outline-secondary btn-sm"
         )
       )
-    ))
+    ),
+    uiOutput(ns("cred_status"))
+  )
+}
+
+# Example prompts shown as clickable cards in the greeting. shinychat renders a
+# markdown list whose items are each a <span class="suggestion"> as a grid of
+# suggestion cards; the "submit" class makes a click send the prompt straight
+# away (the span's text is both the label and the submitted message).
+#
+# Suggestions are page-aware: the default set (Overview / anything without its
+# own entry) explains the dataset and app, while each interactive page gets
+# prompts tuned to what the assistant can DO there -- mostly ones that exercise
+# the page-control tools (see R/agent_bridge.R), so a first click both answers
+# and drives the page. chat_agent_server swaps the greeting to match the active
+# page (via shinychat::chat_set_greeting) whenever no conversation has started.
+.chat_default_suggestions <- c(
+  "What is Tahoe-100M, and how was the experiment designed?",
+  "Which drugs in the dataset target EGFR?",
+  "Which assayed cell lines carry a KRAS driver mutation?",
+  "Help me build a subset of lung-cancer cells and write the pull recipe."
+)
+
+.chat_page_suggestions <- list(
+  drugs = c(
+    "Select breast-cancer drugs on this page.",
+    "Show me the approved kinase inhibitors.",
+    "Filter to drugs that target EGFR.",
+    "Which drugs are in active clinical trials?"
+  ),
+  cell_lines = c(
+    "Select the lung-cancer cell lines.",
+    "Show cell lines carrying a KRAS driver mutation.",
+    "Filter to breast-tissue cell lines.",
+    "Which assayed cell lines have a TP53 mutation?"
+  ),
+  subset = c(
+    "Build a subset of lung-cancer cells.",
+    "Select breast-tissue cell lines for my subset.",
+    "Add EGFR-inhibitor drugs at a low dose.",
+    "Write the pull recipe for the current subset."
+  ),
+  coverage = c(
+    "Focus the matrix on breast-cancer drugs.",
+    "Show coverage for lung and liver organs.",
+    "Which drug × cell-line combos have the most cells?",
+    "What does a darker tile mean here?"
+  ),
+  qc = c(
+    "What do these QC metrics mean?",
+    "How is the pass_filter tier defined?",
+    "Explain the cell-cycle phase breakdown.",
+    "Which plates look like quality outliers?"
+  ),
+  obs = c(
+    "Filter the samples to a single drug.",
+    "Show me the samples on a specific plate.",
+    "What does the mean % mito distribution tell me?",
+    "How is the cell-level obs summarised without loading it?"
+  ),
+  about = c(
+    "What can this app help me do?",
+    "How is the Tahoe-100M data loaded and queried?",
+    "Where does the metadata in these tables come from?",
+    "How do I export a subset recipe as a notebook?"
+  )
+)
+
+# The clickable example prompts for a page id (falls back to the default set).
+.chat_suggestions_for <- function(page = NULL) {
+  if (!is.null(page) && !is.null(.chat_page_suggestions[[page]])) {
+    .chat_page_suggestions[[page]]
+  } else {
+    .chat_default_suggestions
+  }
+}
+
+# Human title for a page id, from the page registry (for the greeting lead-in).
+.chat_page_title <- function(page = NULL) {
+  if (is.null(page)) {
+    return(NULL)
+  }
+  p <- tryCatch(app_pages()[[page]], error = function(e) NULL)
+  p$title
+}
+
+# Build the greeting markdown for a page: a short lead-in naming the page (when
+# known) followed by that page's clickable example prompts.
+.chat_greeting <- function(page = NULL) {
+  title <- .chat_page_title(page)
+  intro <- if (is.null(title) || identical(page, "overview")) {
+    paste(
+      "Hi! I can explain the **Tahoe-100M** dataset and this app, and help",
+      "you plan a subset for your analysis. Try one of these — or just ask:"
+    )
+  } else {
+    paste0(
+      "Hi! You're on the **",
+      title,
+      "** page — I can answer questions and drive its controls for you. ",
+      "Try one of these — or just ask:"
+    )
+  }
+  bullets <- paste0(
+    '- <span class="suggestion submit">',
+    .chat_suggestions_for(page),
+    "</span>"
+  )
+  paste(c(intro, "", bullets), collapse = "\n")
+}
+
+# The chat window for the assistant sidebar. The greeting opens with a few
+# clickable example prompts so a new user can start with one click; it defaults
+# to the general set and is swapped per active page by the server.
+.chat_window <- function(ns, height, fill = FALSE) {
+  shinychat::chat_ui(
+    ns("chat"),
+    height = height,
+    fill = fill,
+    placeholder = "Ask about the dataset, drugs, cell lines, or a subset...",
+    greeting = .chat_greeting(NULL)
+  )
+}
+
+#' The app-wide "Tahoe assistant" sidebar UI (see ui.R). The model / key /
+#' model-id controls sit in a collapsed "Model & key" section at the top; the
+#' conversation fills the rest. Falls back to the setup panel when the assistant
+#' can't be offered.
+chat_agent_ui <- function(id) {
+  ns <- NS(id)
+  if (!tahoe_agent_enabled() || length(.chat_source_choices()) == 0) {
+    return(.chat_disabled_panel())
+  }
+  choices <- .chat_source_choices()
+  config <- .chat_config_controls(ns, choices, .chat_default_source(choices))
+  help_note <- tags$p(
+    class = "text-muted small mb-0",
+    "Switching source starts a fresh conversation."
+  )
+  bslib::as_fill_carrier(div(
+    class = "tahoe-chat-dock",
+    tags$style(HTML(paste0(
+      ".tahoe-chat-dock .form-group,",
+      ".tahoe-chat-dock .shiny-input-container",
+      "{margin-bottom:0.4rem !important;}",
+      ".tahoe-chat-dock .accordion-body{padding:0.6rem 0.8rem;}"
+    ))),
+    # Settings folded into a collapsed section so the chat gets most of the
+    # room; expand it to switch model source or paste a key. The top margin
+    # keeps it clear of the sidebar's collapse toggle in the header.
+    bslib::accordion(
+      open = FALSE,
+      class = "mt-4 mb-2",
+      bslib::accordion_panel(
+        "Model & key",
+        icon = shiny::icon("gear"),
+        config,
+        help_note
+      )
+    ),
+    .chat_window(ns, height = "calc(100vh - 170px)", fill = TRUE)
   ))
 }
 
@@ -206,11 +299,16 @@ chat_agent_ui <- function(id) {
 #' `fetch_models(provider, api_key)` returns the key's live, current model ids
 #' (or NULL to fall back to the curated suggestions); it defaults to the real
 #' ellmer-backed fetch and is injectable so tests avoid the network.
+#' `active_page` is an optional reactive returning the id of the page the user
+#' is currently viewing; when supplied, the greeting's example prompts are
+#' swapped to that page's set (see .chat_greeting) as long as no conversation
+#' has started, so opening the assistant on a page shows prompts tuned to it.
 chat_agent_server <- function(
   id,
   client_factory = NULL,
   append = NULL,
-  fetch_models = NULL
+  fetch_models = NULL,
+  active_page = NULL
 ) {
   moduleServer(id, function(input, output, session) {
     enabled <- !is.null(client_factory) || tahoe_agent_enabled()
@@ -226,16 +324,17 @@ chat_agent_server <- function(
       fetch_models
     }
 
-    # Session-aware tools that read and drive the Subset builder (found lazily via
-    # session$userData; see R/agent_bridge.R). Appended to the base data-layer
-    # tool suite. `session` here is the chat session -- used only to LOOK UP the
-    # bridge; the builder side owns the actual input writes.
-    state_tools <- tahoe_subset_state_tools(session)
+    # Session-aware tools that read the active page and drive the filters /
+    # selections on every interactive page (found lazily via session$userData;
+    # see R/agent_bridge.R). Appended to the base data-layer tool suite.
+    # `session` here is the chat session -- used only to LOOK UP the page
+    # bridges; each page owns the actual input writes.
+    page_tools <- tahoe_page_control_tools(session)
     factory <- if (is.null(client_factory)) {
       function(credential) {
         tahoe_agent_client(
           credential = credential,
-          tools = c(tahoe_agent_tools(), state_tools)
+          tools = c(tahoe_agent_tools(), page_tools)
         )
       }
     } else {
@@ -438,6 +537,19 @@ chat_agent_server <- function(
       do_clear()
     })
 
+    # Swap the greeting's example prompts to match the page the user is on, so
+    # opening the assistant on a page surfaces prompts tuned to it. Only while no
+    # conversation has started -- once the user has sent a turn we leave the
+    # transcript (and its opening bubble) alone.
+    if (!is.null(active_page)) {
+      observeEvent(active_page(), {
+        if (isolate(n_turns()) > 0L) {
+          return()
+        }
+        shinychat::chat_set_greeting("chat", .chat_greeting(active_page()))
+      })
+    }
+
     observeEvent(input$chat_user_input, {
       msg <- input$chat_user_input
       if (is.null(msg) || !nzchar(trimws(msg))) {
@@ -473,18 +585,11 @@ chat_agent_server <- function(
       )
 
       if (!is.null(p) && inherits(p, "promise")) {
+        # A rejected streaming promise must still surface as a chat message
+        # rather than an unhandled error. (The tools a turn used are tracked in
+        # tools_used() but intentionally not shown in the response.)
         promises::then(
           p,
-          onFulfilled = function(value) {
-            used <- unique(tools_used())
-            if (length(used) > 0) {
-              do_append(paste0(
-                "*tools used: ",
-                paste(used, collapse = ", "),
-                "*"
-              ))
-            }
-          },
           onRejected = function(err) {
             do_append(.tahoe_agent_friendly_error(
               conditionMessage(err),
@@ -541,6 +646,13 @@ chat_agent_server <- function(
       cls <- if (isTRUE(st$ok)) "text-success" else "text-muted"
       div(class = paste("small mb-2", cls), st$msg)
     })
+
+    # The settings live in a navbar popover that is collapsed by default, so
+    # these outputs would otherwise suspend and never render until first opened
+    # (and the connection status must stay live regardless).
+    for (nm in c("key_help", "model_source", "cred_status")) {
+      outputOptions(output, nm, suspendWhenHidden = FALSE)
+    }
 
     invisible(list(
       client = client,

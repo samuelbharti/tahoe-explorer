@@ -16,7 +16,7 @@ test_that("tahoe_conditions is one row per drug x cell line x dose", {
   }
 })
 
-test_that("control and plate bar builders return ggplots", {
+test_that("control and plate bar builders build echarts", {
   cond <- tahoe_conditions()
   ctrl <- dplyr::summarise(
     dplyr::group_by(cond[cond$drug == "DMSO_TF", ], cell_name),
@@ -24,10 +24,10 @@ test_that("control and plate bar builders return ggplots", {
     .groups = "drop"
   )
   skip_if(nrow(ctrl) == 0)
-  expect_s3_class(.qc_control_bar(ctrl), "ggplot")
+  expect_s3_class(.qc_control_bar(ctrl), "echarts4r")
 
   ppd <- dplyr::tibble(drug = c("a", "b", "c"), n_plates = c(1L, 1L, 14L))
-  expect_s3_class(.qc_plate_bar(ppd), "ggplot")
+  expect_s3_class(.qc_plate_bar(ppd), "echarts4r")
 })
 
 test_that("threshold drives the underpowered set; incomplete excludes control", {

@@ -12,8 +12,7 @@
   obs = function() obs_explorer_ui("obs"),
   coverage = function() coverage_ui("coverage"),
   qc = function() qc_ui("qc"),
-  subset = function() subset_builder_ui("subset"),
-  chat = function() chat_agent_ui("chat")
+  subset = function() subset_builder_ui("subset")
 )
 
 # The element ids ("#page-anchor") a guide's steps target.
@@ -38,10 +37,7 @@ test_that("each tour is a cicerone guide with steps", {
 })
 
 test_that("every tour step targets an anchor present in its page UI", {
-  # The Chat UI is conditional (assistant disabled in the hermetic test env
-  # renders only the intro), so its enabled-only anchors can't be asserted from
-  # the static UI; check those separately below.
-  for (page in setdiff(names(tahoe_tours()), "chat")) {
+  for (page in names(tahoe_tours())) {
     guide <- tahoe_tours()[[page]]()
     html <- as.character(.tour_page_ui[[page]]())
     for (el in .tour_step_els(guide)) {
@@ -54,14 +50,4 @@ test_that("every tour step targets an anchor present in its page UI", {
       )
     }
   }
-})
-
-test_that("the chat tour intro anchor is always rendered", {
-  html <- as.character(chat_agent_ui("chat"))
-  expect_match(html, 'id="chat-tour_intro"', fixed = TRUE)
-  # The chat tour still references the model picker and the chat window.
-  expect_setequal(
-    .tour_step_els(chat_tour()),
-    c("#chat-tour_intro", "#chat-tour_source", "#chat-chat")
-  )
 })

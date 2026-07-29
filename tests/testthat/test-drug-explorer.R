@@ -53,7 +53,7 @@ test_that(".drug_detail_ui renders the drug's identity and fields", {
   expect_true(grepl(as.character(row$drug[[1]]), html, fixed = TRUE))
 })
 
-test_that("count and target bars accept a highlight and stay ggplots", {
+test_that("count and target bars accept a highlight and build echarts", {
   d <- tahoe_drug()
   skip_if_not(nrow(d) > 0 && "moa-broad" %in% names(d))
   p1 <- .drug_count_bar(
@@ -62,9 +62,9 @@ test_that("count and target bars accept a highlight and stay ggplots", {
     tahoe_colors$primary,
     highlight = as.character(d[["moa-broad"]][[1]])
   )
-  expect_s3_class(p1, "ggplot")
+  expect_s3_class(p1, "echarts4r")
   p2 <- .drug_target_bar(d, tahoe_colors$sand, highlight = "EGFR")
-  expect_s3_class(p2, "ggplot")
+  expect_s3_class(p2, "echarts4r")
 })
 
 test_that("selecting a focus drug renders its detail card", {
