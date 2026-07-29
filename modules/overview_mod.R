@@ -406,6 +406,9 @@ overview_server <- function(id) {
       selection = "single",
       on_click = "select",
       page_size = 8,
+      # Pre-select the first line so the driver-gene and variant-class plots are
+      # populated on load instead of showing an empty "click a row" prompt.
+      default_selected = function(df) if (nrow(df) > 0) 1L else NULL,
       empty_message = "No cell lines for this organ."
     )
 
