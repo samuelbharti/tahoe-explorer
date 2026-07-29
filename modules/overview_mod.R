@@ -399,6 +399,10 @@ overview_server <- function(id) {
       col_defs
     }
 
+    # Remember the selected line by name so it survives a table re-render (a
+    # column toggle or an organ filter) instead of snapping back to the first row.
+    selected_name <- reactiveVal(NULL)
+
     ovtbl <- tahoe_table_server(
       "cell_line_table",
       data = filtered_lines,
@@ -406,9 +410,23 @@ overview_server <- function(id) {
       selection = "single",
       on_click = "select",
       page_size = 8,
-      # Pre-select the first line so the driver-gene and variant-class plots are
-      # populated on load instead of showing an empty "click a row" prompt.
-      default_selected = function(df) if (nrow(df) > 0) 1L else NULL,
+      # Preselect a line so the driver-gene and variant-class plots are populated
+      # on load instead of showing an empty "click a row" prompt. After a
+      # re-render, re-select the same line by name when it is still in the
+      # filtered set, otherwise fall back to the first row.
+      default_selected = function(df) {
+        if (is.null(df) || nrow(df) == 0) {
+          return(NULL)
+        }
+        nm <- isolate(selected_name())
+        if (!is.null(nm)) {
+          i <- which(as.character(df$cell_name) == nm)
+          if (length(i) == 1) {
+            return(i)
+          }
+        }
+        1L
+      },
       empty_message = "No cell lines for this organ."
     )
 
@@ -421,6 +439,9 @@ overview_server <- function(id) {
       }
       fl$cell_name[[idx]]
     })
+    # Mirror the current selection into selected_name so a re-render can restore
+    # it (only real selections; a transient NULL during re-render is ignored).
+    observeEvent(selected_cell(), selected_name(selected_cell()))
 
     driver_rows <- reactive({
       cn <- selected_cell()
