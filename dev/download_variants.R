@@ -28,7 +28,9 @@ mutations_url <- "https://ndownloader.figshare.com/files/51065732"
 mutations_md5 <- "7bdba347a1602fe96d5654a74d6e52f1"
 cellosaurus_api <- "https://api.cellosaurus.org/cell-line/"
 
-`%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a
+# Defined locally because this script runs standalone under Rscript, without
+# global.R loading shiny (which re-exports `%||%`).
+`%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a # nolint: object_name_linter.
 
 if (!requireNamespace("duckdb", quietly = TRUE)) {
   stop(
