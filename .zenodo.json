@@ -9,7 +9,8 @@
     }
   ],
   "version": "0.1.0",
-  "license": "MIT",
+  "publication_date": "2026-08-12",
+  "license": "mit",
   "access_right": "open",
   "keywords": [
     "shiny",
