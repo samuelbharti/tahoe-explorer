@@ -78,8 +78,11 @@ and citation terms, which apply to your use of the data independently of this
 app's MIT license.
 
 - **Tahoe-100M** ([tahoebio/Tahoe-100M](https://huggingface.co/datasets/tahoebio/Tahoe-100M))
-  is the dataset this app explores. Check the dataset page for its license and
-  citation requirements before using or redistributing it.
+  is the dataset this app explores. Released under CC0 1.0, but the authors ask
+  that you cite it: Zhang, J., Ubas, A. A., de Borja, R., Svensson, V., Thomas,
+  N., Thakar, N., Lai, I., Winters, A., Khan, U., Jones, M. G., et al. (2025).
+  *Tahoe-100M: A Giga-Scale Single-Cell Perturbation Atlas for Context-Dependent
+  Gene Function and Cellular Modeling*. bioRxiv.
 - **DepMap 24Q4 Public** (`OmicsSomaticMutations.csv`), used by
   `dev/download_variants.R` for somatic-variant annotation. CC BY 4.0.
   DOI: [10.25452/figshare.plus.27993248.v1](https://doi.org/10.25452/figshare.plus.27993248.v1).
