@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it using these metadata.
+title: "Tahoe Explorer: a Shiny app for exploring Tahoe-100M metadata"
+abstract: >-
+  A Shiny application for exploring the metadata of the Tahoe-100M single-cell
+  perturbation dataset. It summarizes drug, cell-line, sample, gene, and
+  cell-level metadata in interactive charts, and assembles a filtered subset
+  together with a reproducible R and Python pull recipe to plan downstream
+  analysis. The cell-level observation table is queried lazily with duckdb, so
+  the app runs without loading the full table into memory.
+type: software
+authors:
+  - given-names: Samuel
+    family-names: Bharti
+    orcid: "https://orcid.org/0000-0003-4190-7058"
+repository-code: "https://github.com/samuelbharti/tahoe-explorer"
+license: MIT
+keywords:
+  - shiny
+  - single-cell
+  - transcriptomics
+  - perturbation biology
+  - bioinformatics
+  - duckdb
+  - Tahoe-100M

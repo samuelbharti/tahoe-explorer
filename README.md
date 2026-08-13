@@ -70,6 +70,23 @@ Configuration via environment variables (see `.Renviron.example`):
 
 Real data is never committed; only the synthetic fixtures are.
 
+### Data sources
+
+This app does not redistribute any of the datasets below; it downloads them on
+request and ships only synthetic fixtures. Each source carries its own license
+and citation terms, which apply to your use of the data independently of this
+app's MIT license.
+
+- **Tahoe-100M** ([tahoebio/Tahoe-100M](https://huggingface.co/datasets/tahoebio/Tahoe-100M))
+  is the dataset this app explores. Check the dataset page for its license and
+  citation requirements before using or redistributing it.
+- **DepMap 24Q4 Public** (`OmicsSomaticMutations.csv`), used by
+  `dev/download_variants.R` for somatic-variant annotation. CC BY 4.0.
+  DOI: [10.25452/figshare.plus.27993248.v1](https://doi.org/10.25452/figshare.plus.27993248.v1).
+  Cite: DepMap, Broad (2024). *DepMap 24Q4 Public*. Figshare+.
+- **Cellosaurus** (<https://www.cellosaurus.org>), the fallback source of curated
+  driver variants for cell lines DepMap does not cover. CC BY 4.0.
+
 ### HuggingFace token (optional)
 
 The Tahoe-100M dataset is public, so no token is needed -- but a token gives
@@ -196,6 +213,17 @@ Then open [http://localhost:3838](http://localhost:3838).
 Branding lives in [`_brand.yml`](_brand.yml) -- colors and fonts in one place,
 applied automatically by bslib via `bs_theme(brand = TRUE)` in [ui.R](ui.R).
 See [docs/theming.md](docs/theming.md).
+
+## Citation
+
+If you use this app, please cite it using the metadata in
+[CITATION.cff](CITATION.cff). Note that the datasets it reads carry their own
+citation requirements: see [Data sources](#data-sources).
+
+## License
+
+This app's source is released under the [MIT License](LICENSE). The datasets it
+reads are licensed separately by their respective providers.
 
 ## Contributing
 
