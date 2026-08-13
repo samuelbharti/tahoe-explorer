@@ -1,0 +1,30 @@
+{
+  "upload_type": "software",
+  "title": "Tahoe Explorer: a Shiny app for exploring Tahoe-100M metadata",
+  "description": "<p>A Shiny application for exploring the metadata of the Tahoe-100M single-cell perturbation dataset. It summarizes drug, cell-line, sample, gene, and cell-level metadata in interactive charts, and assembles a filtered subset together with a reproducible R and Python pull recipe to plan downstream analysis. The cell-level observation table is queried lazily with duckdb, so the app runs without loading the full table into memory.</p>",
+  "creators": [
+    {
+      "name": "Bharti, Samuel",
+      "orcid": "0000-0003-4190-7058"
+    }
+  ],
+  "version": "0.1.0",
+  "license": "MIT",
+  "access_right": "open",
+  "keywords": [
+    "shiny",
+    "single-cell",
+    "transcriptomics",
+    "perturbation biology",
+    "bioinformatics",
+    "duckdb",
+    "Tahoe-100M"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://huggingface.co/datasets/tahoebio/Tahoe-100M",
+      "relation": "references",
+      "scheme": "url"
+    }
+  ]
+}

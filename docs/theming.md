@@ -54,6 +54,6 @@ the theme colors but falls back to the default graphics-device font.
 
 ## Notes
 
-- `_brand.yml` is app content, not template scaffolding -- `dev/use_template.R`
-  keeps it and only updates `meta.name` to your project name.
+- `_brand.yml` is app content, not build scaffolding; `meta.name` carries the
+  project name.
 - Keep `_brand.yml` in version control so the look of the app is reproducible.
