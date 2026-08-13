@@ -2,10 +2,11 @@
 
 All notable changes to this project should be documented in this file.
 
-## [Unreleased]
+## [0.1.0]
 
 ### Added
 
+- Initial Tahoe Explorer app scaffolded from the Shiny template.
 - Data access layer (`R/data.R`) backed by duckdb, reading Tahoe-100M metadata
   with a synthetic-fixture fallback so the app runs offline.
 - Script to download metadata from HuggingFace (`dev/download_metadata.R`) and
@@ -64,7 +65,3 @@ All notable changes to this project should be documented in this file.
 - The Overview cell-line selection survives re-renders.
 - Cell-cycle legend overlap and plate axis-title clipping.
 - The shinytest2 smoke test skips when no Chrome/Chromium is available.
-
-## [0.1.0]
-
-- Initial Tahoe Explorer app scaffolded from the Shiny template.
