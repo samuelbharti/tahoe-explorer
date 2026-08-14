@@ -7,11 +7,12 @@
 #
 # Why an explicit file list rather than letting rsconnect scan the directory:
 #
-#   1. `data/` holds real downloaded metadata when present, including a ~2.1 GB
-#      obs_metadata.parquet. It is gitignored, but rsconnect scans the working
-#      directory, not the git index, so a plain writeManifest() would bake those
-#      files (and their checksums) into the manifest. Only the small synthetic
-#      fixtures under data/fixtures/ belong in a deployment.
+#   1. `data/` holds the ~2.1 GB obs_metadata.parquet once it is downloaded. It
+#      is gitignored, but rsconnect scans the working directory, not the git
+#      index, so a plain writeManifest() would bake it (and its checksum) into
+#      the manifest. Deriving the list from `git ls-files` means .gitignore is
+#      the single source of truth: the committed small tables and fixtures are
+#      included, the big obs table can never be.
 #   2. `.Rprofile` sources renv/activate.R. Connect installs packages itself
 #      from the manifest, so shipping the renv bootstrap invites it to fight
 #      Connect's library. Both are excluded.
@@ -44,7 +45,9 @@ keep_prefix <- c(
   "userInterface/",
   "www/",
   "inst/",
-  "data/fixtures/"
+  # Tracked data only: the committed small tables plus the synthetic fixtures.
+  # The 2.29 GB obs table is gitignored, so it cannot appear here.
+  "data/"
 )
 
 app_files <- tracked[
@@ -62,7 +65,30 @@ if (length(missing) > 0) {
   )
 }
 
-cat(sprintf("Writing manifest for %d files ...\n", length(app_files)))
+# Safety net: nothing large belongs in a deployment bundle. Catches a force-added
+# obs table or any other oversized file before it reaches the manifest.
+max_kb <- 5000
+sizes_kb <- file.size(app_files) / 1024
+too_big <- app_files[sizes_kb > max_kb]
+if (length(too_big) > 0) {
+  stop(
+    sprintf(
+      "Refusing to write a manifest with files over %d KB: %s",
+      max_kb,
+      paste(
+        sprintf("%s (%.0f KB)", too_big, sizes_kb[sizes_kb > max_kb]),
+        collapse = ", "
+      )
+    ),
+    call. = FALSE
+  )
+}
+
+cat(sprintf(
+  "Writing manifest for %d files (%.1f MB) ...\n",
+  length(app_files),
+  sum(sizes_kb) / 1024
+))
 rsconnect::writeManifest(appDir = ".", appFiles = app_files)
 
 manifest <- jsonlite::fromJSON("manifest.json", simplifyVector = FALSE)

@@ -4622,6 +4622,18 @@
     "_brand.yml": {
       "checksum": "1600decd49b63f66049977e8f801315b"
     },
+    "data/.gitkeep": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "data/cell_line_metadata.parquet": {
+      "checksum": "c12c62f1fa52aa64ff386b85f20b2e7c"
+    },
+    "data/cell_line_variants.parquet": {
+      "checksum": "ca2399a5b9e84bba40516dcdafe33704"
+    },
+    "data/drug_metadata.parquet": {
+      "checksum": "5fbfd0673ef41adf55ab86fa9ad43fc4"
+    },
     "data/fixtures/cell_line_metadata.parquet": {
       "checksum": "b0de9253cdb03be39496af096cb36a8c"
     },
@@ -4639,6 +4651,15 @@
     },
     "data/fixtures/sample_metadata.parquet": {
       "checksum": "ddab14efe95284fb32500f1932b1b560"
+    },
+    "data/gene_metadata.parquet": {
+      "checksum": "81ba69ebfe1e0471e508ed2c8851ea5d"
+    },
+    "data/obs_cell_grid.parquet": {
+      "checksum": "8431aca2725161354eb0c4b189bdb069"
+    },
+    "data/sample_metadata.parquet": {
+      "checksum": "bcb607a7af1bbcf94aa5726eb1ecc35c"
     },
     "global.R": {
       "checksum": "7c38548aa6bdff54502d65377b33ed88"
