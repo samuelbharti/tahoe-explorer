@@ -15,6 +15,7 @@ authors:
     orcid: "https://orcid.org/0000-0003-4190-7058"
 repository-code: "https://github.com/samuelbharti/tahoe-explorer"
 version: 0.1.0
+date-released: "2026-08-12"
 license: MIT
 keywords:
   - shiny
