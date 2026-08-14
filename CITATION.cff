@@ -14,6 +14,14 @@ authors:
     family-names: Bharti
     orcid: "https://orcid.org/0000-0003-4190-7058"
 repository-code: "https://github.com/samuelbharti/tahoe-explorer"
+doi: 10.5281/zenodo.21926312
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.21926312
+    description: Concept DOI, resolves to the latest version.
+  - type: doi
+    value: 10.5281/zenodo.21926313
+    description: DOI for version 0.1.0.
 version: 0.1.0
 date-released: "2026-08-12"
 license: MIT

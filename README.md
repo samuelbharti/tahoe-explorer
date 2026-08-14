@@ -1,5 +1,7 @@
 # Tahoe Explorer
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21926312.svg)](https://doi.org/10.5281/zenodo.21926312)
+
 A lightweight Shiny app to explore [Tahoe-100M](https://huggingface.co/datasets/tahoebio/Tahoe-100M)
 metadata: filter and summarize drug, cell-line, sample, and cell-level metadata
 in quick charts, and pull a subset (filtered file + analysis recipe) to plan
@@ -219,9 +221,14 @@ See [docs/theming.md](docs/theming.md).
 
 ## Citation
 
-If you use this app, please cite it using the metadata in
-[CITATION.cff](CITATION.cff). Note that the datasets it reads carry their own
-citation requirements: see [Data sources](#data-sources).
+Each release is archived on Zenodo. The DOI above resolves to the latest
+version; to cite a specific one, use its own DOI from the
+[Zenodo record](https://doi.org/10.5281/zenodo.21926312) (v0.1.0 is
+[10.5281/zenodo.21926313](https://doi.org/10.5281/zenodo.21926313)).
+
+Full metadata, including author and version, lives in
+[CITATION.cff](CITATION.cff). Note that the datasets this app reads carry their
+own citation requirements: see [Data sources](#data-sources).
 
 ## License
 
