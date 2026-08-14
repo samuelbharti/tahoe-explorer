@@ -24,7 +24,13 @@ repos:
       - id: no-print-statement
         exclude: "^dev/"
 
-  # Generic hygiene.
+  # Secret scanning - block credentials before they are committed.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # Generic hygiene + secret/key safety.
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -36,6 +42,7 @@ repos:
         args: ["--maxkb=2000"]
       - id: check-yaml
       - id: check-merge-conflict
+      - id: detect-private-key
 
   # Catch common spelling mistakes in code and docs.
   - repo: https://github.com/codespell-project/codespell
