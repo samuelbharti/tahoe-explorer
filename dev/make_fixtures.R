@@ -258,6 +258,69 @@ cell_variants <- do.call(
   })
 )
 
+# Vehicle control. The real obs table carries a DMSO_TF arm on every plate, for
+# every cell line, at no dose. It is deliberately absent from drug_metadata, so
+# the real data has 379 drugs but 380 distinct drugs in obs. Without it the QC
+# tab's control breakdown has no data to render, and its test can only skip.
+# Built last so the earlier fixtures' RNG stream is unchanged.
+control_drug <- "DMSO_TF"
+control_plates <- sort(unique(sample_metadata$plate))
+control_lines <- cell_metadata$cell_name
+n_control <- length(control_plates) * length(control_lines)
+
+control_samples <- data.frame(
+  sample = paste0("smp_ctrl_", pad("", seq_along(control_plates), 2)),
+  plate = control_plates,
+  mean_gene_count = round(runif(length(control_plates), 1500, 6000), 1),
+  mean_tscp_count = round(runif(length(control_plates), 5000, 40000), 1),
+  mean_mread_count = round(runif(length(control_plates), 8000, 60000), 1),
+  mean_pcnt_mito = round(runif(length(control_plates), 0.01, 0.15), 4),
+  drug = control_drug,
+  drugname_drugconc = sprintf("[('%s', 0.0, 'uM')]", control_drug),
+  check.names = FALSE,
+  stringsAsFactors = FALSE
+)
+sample_metadata <- rbind(sample_metadata, control_samples)
+
+# One control well for each plate and cell line, so the control is complete
+# across plates and lines exactly as it is in the real data.
+control_grid <- expand.grid(
+  plate = control_plates,
+  cell_name = control_lines,
+  KEEP.OUT.ATTRS = FALSE,
+  stringsAsFactors = FALSE
+)
+control_obs <- data.frame(
+  plate = control_grid$plate,
+  BARCODE_SUB_LIB_ID = paste0("bc_ctrl_", pad("", seq_len(n_control), 6)),
+  sample = control_samples$sample[
+    match(control_grid$plate, control_samples$plate)
+  ],
+  gene_count = as.integer(round(runif(n_control, 800, 8000))),
+  tscp_count = as.integer(round(runif(n_control, 2000, 50000))),
+  mread_count = as.integer(round(runif(n_control, 4000, 80000))),
+  drugname_drugconc = sprintf("[('%s', 0.0, 'uM')]", control_drug),
+  drug = control_drug,
+  cell_line = control_grid$cell_name,
+  sublibrary = sample(c("sublib_A", "sublib_B"), n_control, replace = TRUE),
+  BARCODE = paste0("CCCC", pad("", seq_len(n_control), 8)),
+  pcnt_mito = round(runif(n_control, 0, 0.2), 4),
+  S_score = round(rnorm(n_control), 3),
+  G2M_score = round(rnorm(n_control), 3),
+  phase = sample(phases, n_control, replace = TRUE),
+  pass_filter = sample(
+    c("full", "minimal"),
+    n_control,
+    replace = TRUE,
+    prob = c(0.9, 0.1)
+  ),
+  cell_name = control_grid$cell_name,
+  check.names = FALSE,
+  stringsAsFactors = FALSE
+)
+stopifnot(identical(names(control_obs), names(obs_metadata)))
+obs_metadata <- rbind(obs_metadata, control_obs)
+
 con <- dbConnect(duckdb())
 on.exit(dbDisconnect(con, shutdown = TRUE), add = TRUE)
 

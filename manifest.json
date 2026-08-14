@@ -4638,7 +4638,7 @@
       "checksum": "b0de9253cdb03be39496af096cb36a8c"
     },
     "data/fixtures/cell_line_variants.parquet": {
-      "checksum": "9d4514c83ea1a647d01d58bcb6266682"
+      "checksum": "86878b0774e4c25b2b24b7d748b651c8"
     },
     "data/fixtures/drug_metadata.parquet": {
       "checksum": "e87e6356c662dc5e985e4c24aaae4687"
@@ -4647,10 +4647,10 @@
       "checksum": "b1f3517a4a571ea5ee69ffae417af088"
     },
     "data/fixtures/obs_metadata.parquet": {
-      "checksum": "0d65dd5cb7d400dcdd4d2d9935e25b0b"
+      "checksum": "eaff2c6d298cbf344ee4d959ace798d7"
     },
     "data/fixtures/sample_metadata.parquet": {
-      "checksum": "ddab14efe95284fb32500f1932b1b560"
+      "checksum": "1fa6a6061c39707d2ca41d4c60de7dea"
     },
     "data/gene_metadata.parquet": {
       "checksum": "81ba69ebfe1e0471e508ed2c8851ea5d"

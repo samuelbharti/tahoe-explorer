@@ -23,7 +23,9 @@ test_that("control and plate bar builders build echarts", {
     n_cells = sum(n_cells),
     .groups = "drop"
   )
-  skip_if(nrow(ctrl) == 0)
+  # The fixture carries a DMSO_TF vehicle-control arm on every plate and cell
+  # line (see dev/make_fixtures.R), so this must not be empty.
+  expect_gt(nrow(ctrl), 0)
   expect_s3_class(.qc_control_bar(ctrl), "echarts4r")
 
   ppd <- dplyr::tibble(drug = c("a", "b", "c"), n_plates = c(1L, 1L, 14L))
