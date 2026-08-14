@@ -20,11 +20,22 @@ renv/staging/
 # Local development helpers
 dev/.Rhistory
 
-# Downloaded Tahoe metadata -- never commit real data (only synthetic fixtures)
+# Tahoe metadata. The small curated tables ARE committed (~3.3 MB total) so
+# deployments show real numbers instead of the synthetic demo; Tahoe-100M is
+# CC0 1.0 and the variant table's sources (DepMap, Cellosaurus) are CC BY 4.0,
+# credited in the README. The 2.29 GB cell-level obs table is never committed:
+# query it remotely with TAHOE_OBS_REMOTE=1, or download it for local work with
+# `Rscript dev/download_metadata.R --obs`. Anything else under data/ stays out.
 /data/**
 !/data/.gitkeep
 !/data/fixtures/
 !/data/fixtures/**
+!/data/cell_line_metadata.parquet
+!/data/cell_line_variants.parquet
+!/data/drug_metadata.parquet
+!/data/gene_metadata.parquet
+!/data/obs_cell_grid.parquet
+!/data/sample_metadata.parquet
 
 # Local working docs and tooling (not committed)
 docs/plans/

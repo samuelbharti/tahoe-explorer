@@ -48,14 +48,22 @@ install.packages(c(
 
 ## Data
 
-The app ships with small **synthetic fixtures** under `data/fixtures/` so it
-runs out of the box with no network and no real data.
+The **small curated tables are committed** (~3.3 MB under `data/`), so a clone
+or a deployment shows the real Tahoe-100M numbers straight away: 100,648,790
+cells across 50 assayed cell lines, 379 drugs, 1,344 samples, 62,710 genes.
+Tahoe-100M is CC0 1.0, and the variant table's sources are credited under
+[Data sources](#data-sources).
 
-To explore the real Tahoe-100M metadata, download it (into the gitignored
-`data/` directory):
+The **2.29 GB cell-level `obs` table is not committed.** Cell-level browsing
+therefore falls back to a synthetic fixture unless you either download the table
+or opt into querying it remotely (see `TAHOE_OBS_REMOTE` below). Synthetic
+fixtures also live under `data/fixtures/` so the test suite and a data-free
+checkout still work offline.
+
+To download the real data yourself (into the gitignored part of `data/`):
 
 ```bash
-# Small curated tables (~1.5 MB): drug, cell line, sample, gene
+# Refresh the small curated tables: drug, cell line, sample, gene
 Rscript dev/download_metadata.R
 
 # Also fetch the 2.29 GB cell-level obs table (optional)
@@ -70,7 +78,18 @@ Configuration via environment variables (see `.Renviron.example`):
 - `HF_TOKEN` -- optional HuggingFace token for better remote access (higher rate
   limits, gated datasets). See below.
 
-Real data is never committed; only the synthetic fixtures are.
+The 2.29 GB `obs` table is never committed, and neither is anything else under
+`data/` beyond the six small tables and the fixtures.
+
+### Deploying to Posit Connect Cloud
+
+`manifest.json` (regenerate with `Rscript dev/write_manifest.R`) drives the
+deployment, and the committed small tables mean the deployed app shows real
+numbers rather than the synthetic demo. To make the cell-level tab real too, set
+`TAHOE_OBS_REMOTE=1` in the deployment's environment so duckdb reads the `obs`
+table from HuggingFace over `hf://`; add `HF_TOKEN` for better rate limits, and
+consider `DUCKDB_EXTENSION_DIRECTORY` so the `httpfs` extension is not
+re-downloaded on every container start.
 
 ### Data sources
 

@@ -8,21 +8,23 @@
 renv/library
 renv/staging
 
-# Real Tahoe metadata -- never bake into the image (only synthetic fixtures)
-data/*
-!data/fixtures/
-!data/fixtures/**
-
 dev
 docs
 tests
 *.Rproj
 
-# Real Tahoe metadata -- never bake into the image (only the synthetic fixtures
-# ship, so the container runs the offline demo). Mirrors .gitignore.
+# Tahoe metadata. Mirrors .gitignore: the small curated tables ship so the
+# container shows real numbers, the 2.29 GB cell-level obs table never does
+# (set TAHOE_OBS_REMOTE=1 to query it from HuggingFace instead).
 data/*
 !data/fixtures/
 !data/fixtures/**
+!data/cell_line_metadata.parquet
+!data/cell_line_variants.parquet
+!data/drug_metadata.parquet
+!data/gene_metadata.parquet
+!data/obs_cell_grid.parquet
+!data/sample_metadata.parquet
 
 # Dev tooling / configs not needed in the image
 template.yml
