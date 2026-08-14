@@ -2,27 +2,35 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21926312.svg)](https://doi.org/10.5281/zenodo.21926312)
 
-A lightweight Shiny app to explore [Tahoe-100M](https://huggingface.co/datasets/tahoebio/Tahoe-100M)
-metadata: filter and summarize drug, cell-line, sample, and cell-level metadata
-in quick charts, and pull a subset (filtered file + analysis recipe) to plan
-downstream analysis.
+A Shiny app that explores the metadata of
+[Tahoe-100M](https://huggingface.co/datasets/tahoebio/Tahoe-100M). You can filter
+and summarize the drug, cell-line, sample, and cell-level metadata in charts. You
+can also pull a subset, which is a filtered file with an analysis recipe.
 
-The full dataset is ~100M cells; this app works with the small curated metadata
-tables and queries the large cell-level `obs` table lazily with duckdb -- no need
-to load 2.29 GB into memory.
+The full dataset holds approximately 100 million cells. This app reads the small
+curated tables instead. It queries the large cell-level `obs` table with duckdb,
+and it reads only the rows that a page needs. The app therefore does not load
+2.29 GB into memory.
 
 ## Requirements
 
-- R (>= 4.3)
-- Packages: `shiny`, `bslib`, `duckdb`, `dplyr`, `stringr`, `echarts4r`
-  (charts), `plotly`, `ggplot2`, `scales`, `janitor`, `reactable`, `cicerone`
-  (guided tours), `DiagrammeR` (About-tab diagrams), and `ltc` (chart palettes,
-  from GitHub). `renv` is recommended -- `renv::restore()` installs the exact
-  set, including the GitHub `ltc` package.
+- R 4.3 or later.
+- These packages: `shiny`, `bslib`, `duckdb`, `dplyr`, `stringr`, `echarts4r`,
+  `plotly`, `ggplot2`, `scales`, `janitor`, `reactable`, `cicerone`,
+  `DiagrammeR`, and `ltc`.
+
+`echarts4r` and `plotly` draw the charts. `cicerone` gives the guided tours.
+`DiagrammeR` draws the diagrams on the About tab. `ltc` gives the chart palettes,
+and it comes from GitHub and not from CRAN.
+
+Use `renv` to get the exact versions. `renv::restore()` installs every package,
+including `ltc`.
 
 ## Installation
 
-### Option 1: Using renv (recommended)
+### Option 1: renv
+
+This option gives the exact package versions from `renv.lock`. Use it if you can.
 
 ```r
 if (!requireNamespace("renv", quietly = TRUE)) {
@@ -48,19 +56,21 @@ install.packages(c(
 
 ## Data
 
-The **small curated tables are committed** (~3.3 MB under `data/`), so a clone
-or a deployment shows the real Tahoe-100M numbers straight away: 100,648,790
-cells across 50 assayed cell lines, 379 drugs, 1,344 samples, 62,710 genes.
-Tahoe-100M is CC0 1.0, and the variant table's sources are credited under
-[Data sources](#data-sources).
+The repository holds the **six small curated tables** (approximately 3.3 MB under
+`data/`). A clone and a deployment therefore show the real Tahoe-100M numbers
+immediately: 100,648,790 cells, 50 assayed cell lines, 379 drugs, 1,344 samples,
+and 62,710 genes. Tahoe-100M is CC0 1.0. [Data sources](#data-sources) credits
+the sources of the variant table.
 
-The **2.29 GB cell-level `obs` table is not committed.** Cell-level browsing
-therefore falls back to a synthetic fixture unless you either download the table
-or opt into querying it remotely (see `TAHOE_OBS_REMOTE` below). Synthetic
-fixtures also live under `data/fixtures/` so the test suite and a data-free
-checkout still work offline.
+The repository does **not** hold the 2.29 GB cell-level `obs` table. The
+cell-level tab therefore uses a synthetic fixture. To make that tab real, either
+download the table or set `TAHOE_OBS_REMOTE=1`, which is described below.
 
-To download the real data yourself (into the gitignored part of `data/`):
+The synthetic fixtures are in `data/fixtures/`. The test suite and a checkout
+without real data use these fixtures, so both work without a network.
+
+To download the real data, run these commands. The data goes into the part of
+`data/` that git ignores:
 
 ```bash
 # Refresh the small curated tables: drug, cell line, sample, gene
@@ -70,50 +80,61 @@ Rscript dev/download_metadata.R
 Rscript dev/download_metadata.R --obs
 ```
 
-Configuration via environment variables (see `.Renviron.example`):
+These environment variables control the data. `.Renviron.example` shows each one:
 
-- `TAHOE_METADATA_DIR` -- directory holding downloaded metadata (default `data`).
-- `TAHOE_OBS_REMOTE` -- set to `1` to query the cell-level `obs` table directly
-  from HuggingFace (slower) instead of downloading it.
-- `HF_TOKEN` -- optional HuggingFace token for better remote access (higher rate
-  limits, gated datasets). See below.
+- `TAHOE_METADATA_DIR` is the directory that holds the metadata. The default is
+  `data`.
+- `TAHOE_OBS_REMOTE` set to `1` queries the cell-level `obs` table from
+  HuggingFace. The app then does not need a local copy, but the queries are slow.
+- `HF_TOKEN` is an optional HuggingFace token. A token gives higher rate limits
+  and access to gated datasets. The next section describes it.
 
 The 2.29 GB `obs` table is never committed, and neither is anything else under
 `data/` beyond the six small tables and the fixtures.
 
 ### Deploying to Posit Connect Cloud
 
-`manifest.json` (regenerate with `Rscript dev/write_manifest.R`) drives the
-deployment, and the committed small tables mean the deployed app shows real
-numbers rather than the synthetic demo. To make the cell-level tab real too, set
-`TAHOE_OBS_REMOTE=1` in the deployment's environment so duckdb reads the `obs`
-table from HuggingFace over `hf://`; add `HF_TOKEN` for better rate limits, and
-consider `DUCKDB_EXTENSION_DIRECTORY` so the `httpfs` extension is not
-re-downloaded on every container start.
+`manifest.json` drives the deployment. To write that file again, run
+`Rscript dev/write_manifest.R`.
+
+The repository holds the small curated tables. The deployed app therefore shows
+real numbers, and not the synthetic demo.
+
+To make the cell-level tab real, set these environment variables in the
+deployment:
+
+- `TAHOE_OBS_REMOTE=1` makes duckdb read the `obs` table from HuggingFace through
+  `hf://`.
+- `HF_TOKEN` gives higher rate limits.
+- `DUCKDB_EXTENSION_DIRECTORY` keeps the `httpfs` extension. Without this
+  variable, each container start downloads the extension again.
 
 ### Data sources
 
-This app does not redistribute any of the datasets below; it downloads them on
-request and ships only synthetic fixtures. Each source carries its own license
-and citation terms, which apply to your use of the data independently of this
-app's MIT license.
+The repository holds the six small curated tables. It does not hold the 2.29 GB
+cell-level `obs` table, and the app reads that table only on request.
 
-- **Tahoe-100M** ([tahoebio/Tahoe-100M](https://huggingface.co/datasets/tahoebio/Tahoe-100M))
-  is the dataset this app explores. Released under CC0 1.0, but the authors ask
-  that you cite it: Zhang, J., Ubas, A. A., de Borja, R., Svensson, V., Thomas,
-  N., Thakar, N., Lai, I., Winters, A., Khan, U., Jones, M. G., et al. (2025).
-  *Tahoe-100M: A Giga-Scale Single-Cell Perturbation Atlas for Context-Dependent
-  Gene Function and Cellular Modeling*. bioRxiv.
-- **DepMap 24Q4 Public** (`OmicsSomaticMutations.csv`), used by
-  `dev/download_variants.R` for somatic-variant annotation. CC BY 4.0.
-  DOI: [10.25452/figshare.plus.27993248.v1](https://doi.org/10.25452/figshare.plus.27993248.v1).
+Each source below has its own license and citation terms. These terms apply to
+your use of the data. The MIT license of this app does not change them.
+
+- **Tahoe-100M**
+  ([tahoebio/Tahoe-100M](https://huggingface.co/datasets/tahoebio/Tahoe-100M)) is
+  the dataset that this app explores. The license is CC0 1.0. The authors ask you
+  to cite this reference: Zhang, J., Ubas, A. A., de Borja, R., Svensson, V.,
+  Thomas, N., Thakar, N., Lai, I., Winters, A., Khan, U., Jones, M. G., et al.
+  (2025). *Tahoe-100M: A Giga-Scale Single-Cell Perturbation Atlas for
+  Context-Dependent Gene Function and Cellular Modeling*. bioRxiv.
+- **DepMap 24Q4 Public** (`OmicsSomaticMutations.csv`) gives the somatic-variant
+  annotation, and `dev/download_variants.R` reads it. The license is CC BY 4.0.
+  The DOI is
+  [10.25452/figshare.plus.27993248.v1](https://doi.org/10.25452/figshare.plus.27993248.v1).
   Cite: DepMap, Broad (2024). *DepMap 24Q4 Public*. Figshare+.
-- **Cellosaurus** (<https://www.cellosaurus.org>), the fallback source of curated
-  driver variants for cell lines DepMap does not cover. CC BY 4.0.
+- **Cellosaurus** (<https://www.cellosaurus.org>) gives curated driver variants
+  for the cell lines that DepMap does not cover. The license is CC BY 4.0.
 
 ### HuggingFace token (optional)
 
-The Tahoe-100M dataset is public, so no token is needed -- but a token gives
+The Tahoe-100M dataset is public, so a token is not necessary. A token gives
 higher rate limits and more reliable remote reads. To add one:
 
 1. Create a token with **read** scope at
@@ -139,72 +160,91 @@ Or open the project in RStudio and click Run App.
 
 ## AI assistant
 
-An optional **Tahoe assistant** -- a collapsible left sidebar available on every
-page, toggled by the **Assistant** button in the navbar -- adds a Gemini-backed
-assistant (via `ellmer` and `shinychat` on Google Vertex AI) that can explain the
-Tahoe-100M dataset and this app, and -- most usefully -- help you plan a subset:
-describe your research question and it recommends which filters and columns to
-pick, then returns the same reproducible R + Python pull recipe as the **Subset
-builder** tab. It is also **page-aware**: it knows which tab you're on and can
-apply filters / selections for you on the interactive pages (Drugs, Cell lines,
-Subset builder, Coverage, Samples & cells) -- e.g. "select the breast-cancer
-drugs". It answers only from a set of hand-written tools over the app's metadata,
-so it does not fabricate numbers; no tool can read files, environment variables,
+The app has an optional **Tahoe assistant**. The assistant is a collapsible
+sidebar on the left of every page. The **Assistant** button in the navbar opens
+and closes it. `ellmer` and `shinychat` connect it to Gemini on Google Vertex AI.
+
+The assistant does three things:
+
+- It explains the Tahoe-100M dataset and this app.
+- It helps you plan a subset. Describe your research question, and the assistant
+  recommends the filters and the columns. It then returns the same R and Python
+  pull recipe as the **Subset builder** tab.
+- It applies filters and selections for you. The assistant knows the active tab,
+  and it can act on the Drugs, Cell lines, Subset builder, Coverage, and
+  Samples and cells tabs. For example, you can write "select the breast-cancer
+  drugs".
+
+The assistant answers only from a set of tools over the metadata of the app. It
+therefore does not invent numbers. No tool can read files, environment variables,
 or secrets.
 
-The assistant is **off by default and degrades gracefully**: until it is
-configured (and `ellmer` + `shinychat` are installed), the sidebar shows a short
-setup panel and the rest of the app is unaffected. Nothing about the assistant is
-loaded unless it is enabled.
+The assistant is off by default. Until you configure it, and until `ellmer` and
+`shinychat` are installed, the sidebar shows a short setup panel. The rest of the
+app works as usual, because the app loads nothing for the assistant until you
+enable it.
 
-It can be powered two ways, chosen live from a **Model source** selector in the
-sidebar's collapsible **Model & key** section: a **shared** assistant the
-operator configures on Google Vertex (below), and/or **bring your own key** --
-each user pastes their own Gemini, OpenAI, or Anthropic key, held only in their
-browser session and never stored or logged. Either path alone is enough to enable
-the assistant. With your own key you can pick a model from a short curated list or
-click **List models for this key** to load the provider's current, key-scoped
-models (so the picker never offers a model your account can't use) -- or just type
-any model id and press Enter.
+Two paths can power the assistant. The **Model source** selector in the
+**Model & key** section of the sidebar selects the path:
+
+- A **shared** assistant. The operator configures it on Google Vertex AI, as the
+  next section describes.
+- **Bring your own key**. Each user adds a personal Gemini, OpenAI, or Anthropic
+  key. The key stays in the browser session of that user. The app does not store
+  the key and does not write it to a log.
+
+One path alone can enable the assistant. Both paths together are also correct.
+
+With your own key, you can select a model in three ways:
+
+- Select a model from the short list.
+- Click **List models for this key**. The app then loads the current models of
+  that provider for that key, so the list shows only models that your account can
+  use.
+- Type any model id and press Enter.
 
 To configure the shared assistant:
 
-1. Install the packages (both are in `renv.lock`): `renv::restore()`, or
-   `install.packages(c("ellmer", "shinychat"))`.
-2. Authenticate with Google Cloud once -- **no API key or token is stored in the
-   repo**:
+1. Install the packages with `renv::restore()`, or with
+   `install.packages(c("ellmer", "shinychat"))`. `renv.lock` holds both packages.
+2. Authenticate with Google Cloud one time. The repository stores no API key and
+   no token:
 
    ```sh
    gcloud auth application-default login
    ```
 
-3. Set your project in `.Renviron` (git-ignored; see `.Renviron.example`) and
-   restart R.
+3. Set your project in `.Renviron`, which git ignores. `.Renviron.example` shows
+   the format.
+4. Restart R.
 
-Configuration via environment variables:
+These environment variables control the assistant:
 
-- `TAHOE_VERTEX_PROJECT` -- GCP project with Vertex AI enabled (required to enable
-  the shared assistant). The aliases `VERTEX_PROJECT_ID`, `GOOGLE_CLOUD_PROJECT`,
-  and `GCLOUD_PROJECT` are also accepted.
-- `TAHOE_VERTEX_LOCATION` -- Vertex region (default `us-central1`); the alias
-  `VERTEX_LOCATION` is also accepted.
-- `TAHOE_VERTEX_MODEL` -- Gemini model id (default `gemini-2.5-flash`).
-- `TAHOE_AGENT_TEMPERATURE` -- sampling temperature (default `0.2`, for factual
-  answers).
-- `TAHOE_AGENT_DISABLE` -- set to `1` to force the assistant off even when
-  configured (the test suite sets this).
-- `TAHOE_AGENT_BYOK` -- set to `0` to remove the bring-your-own-key option (on by
-  default whenever the packages are installed).
-- `TAHOE_AGENT_BYOK_PROVIDERS` -- comma list of BYOK providers to offer (default
-  `gemini,openai,anthropic`; unknown names are ignored).
+- `TAHOE_VERTEX_PROJECT` is the Google Cloud project that has Vertex AI enabled.
+  The shared assistant needs this variable. The app also accepts the names
+  `VERTEX_PROJECT_ID`, `GOOGLE_CLOUD_PROJECT`, and `GCLOUD_PROJECT`.
+- `TAHOE_VERTEX_LOCATION` is the Vertex region. The default is `us-central1`. The
+  app also accepts the name `VERTEX_LOCATION`.
+- `TAHOE_VERTEX_MODEL` is the Gemini model id. The default is `gemini-2.5-flash`.
+- `TAHOE_AGENT_TEMPERATURE` is the sampling temperature. The default is `0.2`,
+  which gives factual answers.
+- `TAHOE_AGENT_DISABLE` set to `1` keeps the assistant off, even after you
+  configure it. The test suite sets this variable.
+- `TAHOE_AGENT_BYOK` set to `0` removes the bring-your-own-key option. The option
+  is on while the packages are installed.
+- `TAHOE_AGENT_BYOK_PROVIDERS` is a list of providers, divided by commas. The
+  default is `gemini,openai,anthropic`. The app ignores an unknown name.
 
-The assistant sticks to the Tahoe-100M dataset, this app, and subset planning; it
-declines clinical or medical advice and off-topic requests. In Docker there is no
-`gcloud` login, so the shared assistant degrades to the setup panel unless you
-provide credentials (for example, a mounted service-account key or workload
-identity) -- but users can still bring their own key. Because a bring-your-own key
-travels from the browser to the server, **serve the app over HTTPS** for any
-public deployment.
+The assistant answers only about the Tahoe-100M dataset, this app, and subset
+planning. It refuses clinical advice, medical advice, and off-topic requests.
+
+Docker has no `gcloud` login. The shared assistant therefore shows the setup
+panel, unless you supply credentials. A mounted service-account key and a workload
+identity are two examples of such credentials. Each user can still bring a
+personal key.
+
+**CAUTION:** Serve the app over HTTPS in a public deployment. A
+bring-your-own key travels from the browser to the server.
 
 ## Build And Run With Docker
 
@@ -234,27 +274,31 @@ Then open [http://localhost:3838](http://localhost:3838).
 
 ## Theming
 
-Branding lives in [`_brand.yml`](_brand.yml) -- colors and fonts in one place,
-applied automatically by bslib via `bs_theme(brand = TRUE)` in [ui.R](ui.R).
-See [docs/theming.md](docs/theming.md).
+[`_brand.yml`](_brand.yml) holds the branding. It keeps the colors and the fonts
+in one place. bslib applies the file through `bs_theme(brand = TRUE)` in
+[ui.R](ui.R). For more information, read [docs/theming.md](docs/theming.md).
 
 ## Citation
 
-Each release is archived on Zenodo. The DOI above resolves to the latest
-version; to cite a specific one, use its own DOI from the
-[Zenodo record](https://doi.org/10.5281/zenodo.21926312) (v0.1.0 is
-[10.5281/zenodo.21926313](https://doi.org/10.5281/zenodo.21926313)).
+Zenodo archives each release. The DOI at the top of this file resolves to the
+most recent version. To cite one specific version, use the DOI of that version
+from the [Zenodo record](https://doi.org/10.5281/zenodo.21926312). The DOI of
+v0.1.0 is [10.5281/zenodo.21926313](https://doi.org/10.5281/zenodo.21926313).
 
-Full metadata, including author and version, lives in
-[CITATION.cff](CITATION.cff). Note that the datasets this app reads carry their
-own citation requirements: see [Data sources](#data-sources).
+[CITATION.cff](CITATION.cff) holds the full metadata, which includes the author
+and the version.
+
+Note: the datasets that this app reads have their own citation requirements. Read
+[Data sources](#data-sources) for these requirements.
 
 ## License
 
-This app's source is released under the [MIT License](LICENSE). The datasets it
-reads are licensed separately by their respective providers.
+The [MIT License](LICENSE) covers the source of this app. The providers of each
+dataset license their data separately.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Pull request titles follow
-[Conventional Commits](https://www.conventionalcommits.org/) (enforced in CI).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before you open a pull request. Each pull
+request title must obey
+[Conventional Commits](https://www.conventionalcommits.org/). A workflow enforces
+this rule.

@@ -2,38 +2,53 @@
 
 ## Recommended: renv
 
-1. Install `renv` if needed.
-2. Run `renv::restore()` in the project root.
+1. If `renv` is not installed, install it with `install.packages("renv")`.
+2. In the project root, run `renv::restore()`.
 3. Start the app with `shiny::runApp()`.
 
-If you are using Docker, keep `renv.lock` and the `renv/` directory in the project root so the image can restore the project library from the lockfile.
+`renv::restore()` installs the exact package versions from `renv.lock`. These
+versions include `ltc`, which comes from GitHub and not from CRAN.
 
-### Quick-start helper
+Note: keep `renv.lock` and the `renv/` directory in the project root. The Docker
+image restores the project library from the lockfile.
 
-This template includes a helper script to initialize `renv` for a new project. Run:
+## Manual setup
+
+1. Install the packages that the README lists.
+2. Start the app with `shiny::runApp()`.
+
+This path does not give the exact versions from the lockfile. Use `renv` if you
+need a reproducible library.
+
+## Docker
+
+To build the image, run:
+
+```bash
+docker build -t tahoe-explorer .
+```
+
+To start the container, run:
+
+```bash
+docker run --rm -p 3838:3838 tahoe-explorer
+```
+
+Then open [http://localhost:3838](http://localhost:3838).
+
+The `Dockerfile` restores the library from `renv.lock`. It does not install
+packages one at a time.
+
+Note: the image carries the small curated tables and the synthetic fixtures. It
+does not carry the 2.29 GB cell-level `obs` table.
+
+## Renv helper script
+
+`dev/init-renv.R` initializes `renv` for a new project. To run it:
 
 ```sh
 Rscript dev/init-renv.R
 ```
 
-This will create `renv.lock` after installing a small set of recommended packages. Review the lockfile before committing.
-
-## Manual setup
-
-Install required packages listed in README and run `shiny::runApp()`.
-
-## Docker
-
-Build:
-
-```bash
-docker build -t my-shiny-app .
-```
-
-Run:
-
-```bash
-docker run --rm -p 3838:3838 my-shiny-app
-```
-
-The Dockerfile is intended to restore from `renv.lock` rather than install packages ad hoc.
+The script writes `renv.lock` after it installs a small set of packages. Read
+the lockfile before you commit it.
