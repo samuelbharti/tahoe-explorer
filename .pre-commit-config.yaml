@@ -8,8 +8,8 @@ exclude: "^(renv/|data/|docs/)"
 
 repos:
   # R code formatting with air (matches air.toml; same formatter rstudio/shiny uses).
-  - repo: https://github.com/posit-dev/air
-    rev: v0.9.0
+  - repo: https://github.com/posit-dev/air-pre-commit
+    rev: 0.11.0
     hooks:
       - id: air-format
 
@@ -42,4 +42,6 @@ repos:
     rev: v2.3.0
     hooks:
       - id: codespell
-        args: ["--ignore-words-list=ans,fo"]
+        # renv.lock is generated and full of author names codespell misreads.
+        exclude: "^renv\\.lock$"
+        args: ["--ignore-words-list=ans,fo,socio-economic"]
