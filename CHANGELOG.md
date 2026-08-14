@@ -2,6 +2,45 @@
 
 All notable changes to this project should be documented in this file.
 
+## [0.1.1] - 2026-08-14
+
+### Added
+
+- `manifest.json` for Posit Connect Cloud, plus `dev/write_manifest.R` to write
+  it again. The generator takes its file list from `git ls-files`, so the 2.29 GB
+  `obs` table cannot enter the deployment bundle.
+- The six small curated metadata tables (approximately 3.3 MB) are now committed,
+  so a clone and a deployment show the real Tahoe-100M numbers instead of the
+  synthetic demo. The 2.29 GB `obs` table is still not committed.
+- `Secret scan` workflow that runs gitleaks over the full history, and a gitleaks
+  pre-commit hook. The hooks also gained `detect-private-key`.
+- A `DMSO_TF` vehicle-control arm in the synthetic fixtures, on every plate and
+  every cell line.
+- Zenodo DOI badge in the README, and the concept DOI and version DOI in
+  `CITATION.cff`.
+
+### Changed
+
+- The `app` CI job installs `ellmer` and `shinychat`. Without them the assistant
+  tests skipped, so `R/agent*.R` and `modules/chat_mod.R` had no coverage. CI now
+  reports 402 passing tests and no skips.
+- README, CONTRIBUTING, and `docs/*.md` are rewritten in ASD-STE100 Simplified
+  Technical English.
+- README credits the data sources and states the license of each one.
+
+### Fixed
+
+- The QC control-bar assertion ran no checks, because the fixtures had no vehicle
+  control. The test now asserts instead of skipping (#45).
+- `docs/development.md` told contributors to branch from `dev`, which does not
+  exist, and said that no CI workflows are assumed.
+- `docs/installation.md` and `docs/theming.md` described this repository as a
+  project template.
+- `docs/project_structure.md` omitted `inst/`, `tests/`, and `manifest.json`.
+- README said that the app redistributes none of the datasets and ships only
+  synthetic fixtures. Both statements became untrue when the curated tables were
+  committed.
+
 ## [0.1.0] - 2026-08-12
 
 ### Added
