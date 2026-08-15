@@ -1,6 +1,8 @@
 # Tahoe Explorer
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21926312.svg)](https://doi.org/10.5281/zenodo.21926312)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21926312-1682D4)](https://doi.org/10.5281/zenodo.21926312)
+
+By [Samuel Bharti](https://www.samuelbharti.com)
 
 A Shiny app that explores the metadata of
 [Tahoe-100M](https://huggingface.co/datasets/tahoebio/Tahoe-100M). You can filter
@@ -278,6 +280,15 @@ Then open [http://localhost:3838](http://localhost:3838).
 in one place. bslib applies the file through `bs_theme(brand = TRUE)` in
 [ui.R](ui.R). For more information, read [docs/theming.md](docs/theming.md).
 
+## Author
+
+I am **Samuel Bharti**. I wrote this app and I maintain it on my own.
+
+- Email: <samuelbharti.io@gmail.com>
+- Web: [samuelbharti.com](https://www.samuelbharti.com)
+- ORCID: [0000-0003-4190-7058](https://orcid.org/0000-0003-4190-7058)
+- GitHub: [@samuelbharti](https://github.com/samuelbharti)
+
 ## Citation
 
 Zenodo archives each release. The DOI at the top of this file resolves to the
@@ -286,19 +297,24 @@ from the [Zenodo record](https://doi.org/10.5281/zenodo.21926312). The DOI of
 v0.1.0 is [10.5281/zenodo.21926313](https://doi.org/10.5281/zenodo.21926313).
 
 [CITATION.cff](CITATION.cff) holds the full metadata, which includes the author
-and the version.
+and the version. [CITATION.md](CITATION.md) gives a ready-made text and BibTeX
+entry.
 
 Note: the datasets that this app reads have their own citation requirements. Read
 [Data sources](#data-sources) for these requirements.
 
 ## License
 
-The [MIT License](LICENSE) covers the source of this app. The providers of each
-dataset license their data separately.
+The [MIT License](LICENSE) covers the source of this app. Copyright (c) 2026
+Samuel Bharti. The providers of each dataset license their data separately.
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before you open a pull request. Each pull
-request title must obey
-[Conventional Commits](https://www.conventionalcommits.org/). A workflow enforces
-this rule.
+I maintain this on my own, and issues and pull requests are welcome. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) first, and please follow the
+[Code of Conduct](CODE_OF_CONDUCT.md). Each pull request title must obey
+[Conventional Commits](https://www.conventionalcommits.org/), because a
+workflow checks it.
+
+Found a security problem? Do not open a public issue. Email me instead, as
+[SECURITY.md](SECURITY.md) describes.
