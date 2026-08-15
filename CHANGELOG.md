@@ -2,6 +2,25 @@
 
 All notable changes to this project should be documented in this file.
 
+## [0.1.2] - 2026-08-15
+
+### Fixed
+
+- `manifest.json` did not name `brand.yml`. bslib lists it under Suggests, so
+  Connect Cloud never installed it and `bs_theme(brand = TRUE)` failed at
+  startup. It is now named explicitly.
+- `app_version()` still returned 0.1.0 after the 0.1.1 release, so the version
+  shown in the app disagreed with `CITATION.cff`.
+- The Zenodo DOI badge did not render. GitHub proxies README images through
+  camo, and Zenodo answers camo with a 429. It is now a shields.io badge with
+  the same DOI and link target.
+
+### Changed
+
+- Shortened the Code of Conduct and rewrote the contributing guide.
+- Added a security policy, a plain-text citation file, and an Author section in
+  the README.
+
 ## [0.1.1] - 2026-08-14
 
 ### Added
