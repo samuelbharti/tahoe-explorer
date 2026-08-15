@@ -282,7 +282,7 @@ in one place. bslib applies the file through `bs_theme(brand = TRUE)` in
 
 ## Author
 
-Samuel Bharti, sole author and maintainer.
+Samuel Bharti
 
 - Email: <samuelbharti.io@gmail.com>
 - Web: [samuelbharti.com](https://www.samuelbharti.com)
