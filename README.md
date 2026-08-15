@@ -297,7 +297,8 @@ from the [Zenodo record](https://doi.org/10.5281/zenodo.21926312). The DOI of
 v0.1.0 is [10.5281/zenodo.21926313](https://doi.org/10.5281/zenodo.21926313).
 
 [CITATION.cff](CITATION.cff) holds the full metadata, which includes the author
-and the version.
+and the version. [CITATION.md](CITATION.md) gives a ready-made text and BibTeX
+entry.
 
 Note: the datasets that this app reads have their own citation requirements. Read
 [Data sources](#data-sources) for these requirements.
