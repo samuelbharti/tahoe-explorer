@@ -292,9 +292,10 @@ I am **Samuel Bharti**. I wrote this app and I maintain it on my own.
 ## Citation
 
 Zenodo archives each release. The DOI at the top of this file resolves to the
-most recent version. To cite one specific version, use the DOI of that version
-from the [Zenodo record](https://doi.org/10.5281/zenodo.21926312). The DOI of
-v0.1.0 is [10.5281/zenodo.21926313](https://doi.org/10.5281/zenodo.21926313).
+most recent version. To cite one specific version, use the DOI of that version.
+The DOI of v0.1.1 is
+[10.5281/zenodo.21934284](https://doi.org/10.5281/zenodo.21934284).
+[CITATION.cff](CITATION.cff) lists the DOI of each version.
 
 [CITATION.cff](CITATION.cff) holds the full metadata, which includes the author
 and the version. [CITATION.md](CITATION.md) gives a ready-made text and BibTeX
