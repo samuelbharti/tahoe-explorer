@@ -27,9 +27,9 @@ messages, and anywhere you are representing the project.
 Email <samuelbharti.io@gmail.com>. Every report is read and kept confidential,
 and you will hear back with the outcome.
 
-Enforcement rests with the sole maintainer, Samuel Bharti. Where it is
-warranted, that means editing or deleting a contribution, or blocking an account
-from the repository.
+Enforcement rests with the current maintainer. Where it is warranted, that
+means editing or deleting a contribution, or blocking an account from the
+repository.
 
 ## Attribution
 
