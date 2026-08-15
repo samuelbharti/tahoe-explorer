@@ -1,15 +1,14 @@
 # Code of Conduct
 
-I maintain this project on my own, and I would like it to stay a place where
-anyone can ask a question, report a bug, or send a patch without being made to
-feel unwelcome.
+This is a one-person project, and the aim is to keep it somewhere anyone can ask
+a question, report a bug, or send a patch without being made to feel unwelcome.
 
-## What I ask of you
+## What is expected
 
-- Be respectful, and assume good faith. People here have different backgrounds
-  and different levels of experience.
-- Keep criticism about the code, not about the person who wrote it.
-- Accept that I may decline a change, and that I may be slow to reply.
+- Be respectful and assume good faith, since people here come with different
+  backgrounds and different levels of experience.
+- Keep criticism about the code rather than the person who wrote it.
+- Accept that a change may be turned down, and that a reply may take a while.
 
 ## What is not acceptable
 
@@ -25,12 +24,11 @@ messages, and anywhere you are representing the project.
 
 ## Reporting
 
-If you experience or witness any of the above, email me at
-<samuelbharti.io@gmail.com>. I read every report, I keep it confidential, and I
-will tell you what I decided.
+Email <samuelbharti.io@gmail.com>. Every report is read and kept confidential,
+and you will hear back with the outcome.
 
-I am the only maintainer, so I am also the only person enforcing this. Where it
-is warranted I will edit or delete a contribution, and I will block an account
+Enforcement rests with the sole maintainer, Samuel Bharti. Where it is
+warranted, that means editing or deleting a contribution, or blocking an account
 from the repository.
 
 ## Attribution
