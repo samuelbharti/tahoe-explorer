@@ -1,67 +1,61 @@
-# Contributing Guidelines
+# Contributing
 
-## Branching
+Thanks for looking. This is a solo project, so please open an issue before you
+start on anything large. That way I can tell you early whether I want it, and
+you do not waste the work. Small fixes are welcome as a pull request straight
+away.
 
-- Create feature branches from `main`.
-- Open pull requests into `main`.
-- Give each pull request a title that obeys
-  [Conventional Commits](https://www.conventionalcommits.org/). The
-  `PR Title Lint` workflow enforces this rule.
+Please also read the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-## Local Setup
-
-1. Restore the dependencies with `renv::restore()`.
-2. Run the app with `shiny::runApp()`.
-3. Install the git pre-commit hooks. This step is recommended:
-
-   ```bash
-   pip install pre-commit
-   pre-commit install
-   ```
-
-The hooks format the R code, lint it, and scan for secrets before each commit.
-
-## Code Style
-
-- Keep the page UI definitions in `userInterface/`.
-- Keep the reusable UI and server logic in `modules/`.
-- Keep the utility functions in `R/`. `R/load_components.R` sources them.
-- Format the R code with [air](https://posit-dev.github.io/air/): `air format .`
-- Lint the R code with `lintr::lint_dir(".")`. The configuration is in `.lintr`.
-
-## Testing
-
-Run the tests with:
+## Setup
 
 ```r
-shiny::runTests(".")
+renv::restore()   # install the pinned dependencies, including ltc from GitHub
+shiny::runApp()   # run the app
 ```
 
-Add tests at the correct layer:
+You need no data download and no network. The repository carries the six small
+curated tables, and the tests use the synthetic fixtures in `data/fixtures/`.
 
-- Unit tests for the functions in `R/`.
-- `shiny::testServer()` tests for the reactive logic of a module.
-- `shinytest2` tests for behavior from end to end.
+The git hooks are optional but recommended. They format, lint, and scan for
+secrets before each commit:
 
-The tests use the synthetic fixtures, so they need no network and no real data.
+```bash
+pip install pre-commit
+pre-commit install
+```
 
-## Continuous Integration
+## Where code goes
 
-Every push and every pull request runs these workflows:
+- `R/` for the utilities, the data layer, and the page registry.
+  `R/load_components.R` sources them for you.
+- `modules/` for Shiny modules, one per feature tab.
+- `userInterface/` for the page definitions, which register their own tabs.
+- `dev/` for the download and fixture-generation scripts.
+- `tests/testthat/` for the tests.
 
-- `CI` does the lint, the format check, the tests, and the Markdown lint.
-- `Secret scan` runs gitleaks over the full history of the repository.
-- `PR Title Lint` makes sure that the pull request title obeys Conventional
-  Commits.
-- `Labeler` adds labels from the changed paths.
+## Before you open a pull request
 
-Make sure that these checks pass on your machine before you open a pull request.
+Branch from `main` and open the pull request against `main`. Give the pull
+request a title in [Conventional Commits](https://www.conventionalcommits.org/)
+form, such as `feat: add a coverage tab`, because a workflow checks it. Then
+check that all of this passes:
 
-## Pull Request Checklist
+```bash
+air format .              # format
+```
 
-- [ ] The app runs locally (`shiny::runApp()`).
-- [ ] The code is formatted (`air format .`) and the lint is clean
-      (`lintr::lint_dir(".")`).
-- [ ] The tests pass (`shiny::runTests(".")`).
-- [ ] The new code obeys the project structure.
-- [ ] If the behavior changed, the README and the documents are current.
+```r
+lintr::lint_dir(".")      # lint, configured in .lintr
+shiny::runTests(".")      # tests
+shiny::runApp()           # the app still starts
+```
+
+Add a test for what you changed: a unit test for an `R/` function, a
+`shiny::testServer()` test for module reactivity, or a `shinytest2` test for
+end-to-end behavior. If behavior changed, update the README too.
+
+On every push and pull request, `CI` runs the lint, the format check, the
+tests, and the Markdown lint; `Secret scan` runs gitleaks over the full
+history; `PR Title Lint` checks the title; and `Labeler` labels the pull
+request from the paths you changed.
