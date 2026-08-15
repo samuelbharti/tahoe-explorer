@@ -23,7 +23,7 @@ Notes:
 
 - `10.5281/zenodo.21926312` is the concept DOI, and it always resolves to the
   latest version. To cite one specific version, use that version's DOI from the
-  Zenodo record. The DOI of v0.1.0 is `10.5281/zenodo.21926313`.
+  Zenodo record. The DOI of v0.1.2 is `10.5281/zenodo.21950641`, and of v0.1.0 `10.5281/zenodo.21926313`.
 - For automated citation support on GitHub, keep a `CITATION.cff` in the
   repository root.
 - The datasets this app reads have their own citation requirements, which this
