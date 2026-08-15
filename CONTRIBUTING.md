@@ -1,8 +1,8 @@
 # Contributing
 
-Thanks for looking. This is a solo project, so please open an issue before you
-start on anything large. That way I can tell you early whether I want it, and
-you do not waste the work. Small fixes are welcome as a pull request straight
+Thanks for looking. This is a one-person project, so for anything large please
+open an issue first: that way you get an early yes or no instead of sinking time
+into work that may not land. Small fixes are welcome as a pull request straight
 away.
 
 Please also read the [Code of Conduct](CODE_OF_CONDUCT.md).

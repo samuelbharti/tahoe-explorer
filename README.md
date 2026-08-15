@@ -282,7 +282,7 @@ in one place. bslib applies the file through `bs_theme(brand = TRUE)` in
 
 ## Author
 
-I am **Samuel Bharti**. I wrote this app and I maintain it on my own.
+Samuel Bharti, sole author and maintainer.
 
 - Email: <samuelbharti.io@gmail.com>
 - Web: [samuelbharti.com](https://www.samuelbharti.com)
@@ -310,11 +310,10 @@ Samuel Bharti. The providers of each dataset license their data separately.
 
 ## Contributing
 
-I maintain this on my own, and issues and pull requests are welcome. Read
-[CONTRIBUTING.md](CONTRIBUTING.md) first, and please follow the
-[Code of Conduct](CODE_OF_CONDUCT.md). Each pull request title must obey
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md)
+first, and please follow the [Code of Conduct](CODE_OF_CONDUCT.md). Each pull request title must obey
 [Conventional Commits](https://www.conventionalcommits.org/), because a
 workflow checks it.
 
-Found a security problem? Do not open a public issue. Email me instead, as
-[SECURITY.md](SECURITY.md) describes.
+For a security problem, do not open a public issue: [SECURITY.md](SECURITY.md)
+explains how to report it privately.

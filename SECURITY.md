@@ -2,16 +2,15 @@
 
 ## Supported versions
 
-I maintain this project on my own. I fix security problems on `main` and in the
-next release. I do not backport fixes to older tags.
+Fixes land on `main` and go out with the next release. Older tags are not
+patched.
 
 ## Reporting a problem
 
-**Please do not open a public issue for a security problem.**
-
-Email me at <samuelbharti.io@gmail.com>. Tell me what you found and, if you
-can, how to reproduce it. I will acknowledge your report within a few days and
-tell you what I plan to do about it.
+Please do not open a public issue for a security problem. Email
+<samuelbharti.io@gmail.com> instead, describing what you found and, where you
+can, the steps to reproduce it. You will get an acknowledgement within a few
+days, along with what happens next.
 
 ## Worth knowing before you report
 
