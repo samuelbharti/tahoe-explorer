@@ -4,7 +4,7 @@ Please cite this repository when using it in publications or derivative projects
 
 Recommended citation (APA):
 
-Bharti, S. (2026). *Tahoe Explorer: a Shiny app for exploring Tahoe-100M metadata* (version 0.1.3) [Software]. Zenodo. <https://doi.org/10.5281/zenodo.21926312>
+Bharti, S. (2026). *Tahoe Explorer: a Shiny app for exploring Tahoe-100M metadata* (version 0.1.4) [Software]. Zenodo. <https://doi.org/10.5281/zenodo.21926312>
 
 BibTeX:
 
@@ -12,7 +12,7 @@ BibTeX:
 @software{tahoe_explorer_2026,
   author  = {Bharti, Samuel},
   title   = {Tahoe Explorer: a Shiny app for exploring Tahoe-100M metadata},
-  version = {0.1.3},
+  version = {0.1.4},
   date    = {2026-09-10},
   doi     = {10.5281/zenodo.21926312},
   url     = {https://doi.org/10.5281/zenodo.21926312}
