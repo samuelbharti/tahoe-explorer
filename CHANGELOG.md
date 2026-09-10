@@ -2,6 +2,15 @@
 
 All notable changes to this project should be documented in this file.
 
+## [0.1.3] - 2026-09-10
+
+### Added
+
+- `assets/demo.mp4`, a short clip of the app for the bioinformatics gallery.
+  `assets` is in `.rscignore`, so a deployment does not carry it.
+- The DOI of v0.1.1 in `CITATION.cff`. The README and `CITATION.md` now point
+  to that file for the DOI of each version.
+
 ## [0.1.2] - 2026-08-15
 
 ### Fixed

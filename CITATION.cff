@@ -23,10 +23,13 @@ identifiers:
     value: 10.5281/zenodo.21950641
     description: DOI for version 0.1.2.
   - type: doi
+    value: 10.5281/zenodo.21934284
+    description: DOI for version 0.1.1.
+  - type: doi
     value: 10.5281/zenodo.21926313
     description: DOI for version 0.1.0.
-version: 0.1.2
-date-released: "2026-08-15"
+version: 0.1.3
+date-released: "2026-09-10"
 license: MIT
 keywords:
   - shiny
