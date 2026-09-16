@@ -52,8 +52,8 @@ install.packages(c(
 ))
 
 # `ltc` (chart palettes) is on GitHub, not CRAN:
-# install.packages("remotes")
-# remotes::install_github("loukesio/ltc-color-palettes")
+# install.packages("pak")
+# pak::pak("loukesio/ltc-color-palettes")
 ```
 
 ## Data
